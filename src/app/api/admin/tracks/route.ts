@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 function slugify(input: string): string {
   return input
@@ -54,8 +53,7 @@ export async function POST(request: Request) {
     is_published: body.is_published === true,
   }
 
-  const admin = createAdminClient()
-  const { data, error } = await admin
+  const { data, error } = await supabase
     .from('tracks')
     .insert(insertPayload)
     .select('id, slug, title')
