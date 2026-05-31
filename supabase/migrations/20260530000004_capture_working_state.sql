@@ -13,8 +13,6 @@
 --     (PostgREST translates that to INSERT ... RETURNING which needs SELECT).
 
 -- ============ FINAL is_admin() STATE ============
-DROP FUNCTION IF EXISTS is_admin();
-
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN
 LANGUAGE SQL

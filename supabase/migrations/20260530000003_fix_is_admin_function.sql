@@ -11,8 +11,6 @@
 --   2. Grants EXECUTE on is_admin() to the authenticated role explicitly
 --   3. Forces PostgREST to reload its schema cache
 
-DROP FUNCTION IF EXISTS is_admin();
-
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN
 LANGUAGE SQL
