@@ -114,11 +114,11 @@ export default function NewTrackPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-[var(--color-bg-base)] text-[var(--color-fg-primary)]">
       <div className="max-w-2xl mx-auto p-6 sm:p-10">
         <div className="mb-8 flex items-center justify-between">
-          <h1 className="text-2xl sm:text-3xl font-bold">Add Track</h1>
-          <Link href="/admin" className="text-sm text-neutral-400 hover:text-white underline">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--color-fg-primary)]">Add Track</h1>
+          <Link href="/admin" className="text-sm text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] transition-colors">
             Back to dashboard
           </Link>
         </div>
@@ -228,8 +228,8 @@ export default function NewTrackPage() {
             />
           </Field>
 
-          <fieldset className="space-y-3 border border-neutral-800 rounded-md p-4">
-            <legend className="text-sm text-neutral-400 px-2">Platform links</legend>
+          <fieldset className="space-y-3 border border-[var(--color-border-default)] rounded-[var(--radius-md)] p-4">
+            <legend className="text-sm text-[var(--color-fg-secondary)] px-2">Platform links</legend>
             <PlatformInput label="Spotify" value={form.platform_spotify} onChange={(v) => update('platform_spotify', v)} />
             <PlatformInput label="Apple Music" value={form.platform_apple_music} onChange={(v) => update('platform_apple_music', v)} />
             <PlatformInput label="YouTube Music" value={form.platform_youtube_music} onChange={(v) => update('platform_youtube_music', v)} />
@@ -261,21 +261,21 @@ export default function NewTrackPage() {
             <button
               type="submit"
               disabled={submitting || !form.title}
-              className="bg-white text-black font-semibold rounded-md px-5 py-3 hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {submitting ? 'Saving...' : 'Save track'}
             </button>
             <button
               type="button"
               onClick={() => setForm(EMPTY)}
-              className="text-sm text-neutral-400 hover:text-white"
+              className="text-sm text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] transition-colors"
             >
               Reset
             </button>
           </div>
 
           {message && (
-            <p className={`text-sm ${message.kind === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+            <p className={`text-sm ${message.kind === 'success' ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'}`}>
               {message.text}
             </p>
           )}
@@ -286,12 +286,12 @@ export default function NewTrackPage() {
 }
 
 const inputClass =
-  'w-full bg-neutral-900 border border-neutral-800 rounded-md px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-white'
+  'w-full bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-3 py-2.5 text-[var(--color-fg-primary)] placeholder:text-[var(--color-fg-tertiary)] focus:border-[var(--color-border-strong)] transition-colors'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-sm text-neutral-300 mb-1.5">{label}</span>
+      <span className="block text-sm text-[var(--color-fg-secondary)] mb-1.5">{label}</span>
       {children}
     </label>
   )
@@ -300,7 +300,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function PlatformInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <label className="block">
-      <span className="block text-xs text-neutral-400 mb-1">{label}</span>
+      <span className="block text-xs text-[var(--color-fg-tertiary)] mb-1">{label}</span>
       <input
         type="url"
         placeholder="https://..."

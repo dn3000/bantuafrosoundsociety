@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { Logo } from '@/components/Logo'
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState('')
@@ -46,10 +47,15 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black text-white px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 bg-[var(--color-bg-base)]">
       <div className="w-full max-w-md">
-        <h1 className="text-3xl font-bold mb-2">BASS Admin</h1>
-        <p className="text-neutral-400 mb-8">Sign in to continue.</p>
+        <div className="mb-10">
+          <Logo variant="mark" className="h-12 w-auto mb-6" priority />
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--color-fg-primary)]">BASS Admin</h1>
+          <p className="text-sm text-[var(--color-fg-secondary)] mt-2">
+            Sign in with your email to continue.
+          </p>
+        </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <input
@@ -58,7 +64,7 @@ export default function AdminLoginPage() {
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-white"
+            className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-4 py-3 text-[var(--color-fg-primary)] placeholder:text-[var(--color-fg-tertiary)] focus:border-[var(--color-border-strong)] transition-colors"
           />
           {mode === 'password' && (
             <input
@@ -67,27 +73,27 @@ export default function AdminLoginPage() {
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-white"
+              className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-4 py-3 text-[var(--color-fg-primary)] placeholder:text-[var(--color-fg-tertiary)] focus:border-[var(--color-border-strong)] transition-colors"
             />
           )}
           <button
             type="submit"
             disabled={loading || !email || (mode === 'password' && !password)}
-            className="w-full bg-white text-black font-semibold rounded-md px-4 py-3 hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className="w-full bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-4 py-3 hover:bg-[var(--color-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? 'Signing in...' : mode === 'password' ? 'Sign in' : 'Send magic link'}
+            {loading ? 'Signing in…' : mode === 'password' ? 'Sign in' : 'Send magic link'}
           </button>
         </form>
 
         <button
           onClick={() => { setMode(mode === 'password' ? 'magic' : 'password'); setMessage(null) }}
-          className="mt-4 text-sm text-neutral-500 hover:text-white transition"
+          className="mt-4 text-sm text-[var(--color-fg-tertiary)] hover:text-[var(--color-fg-primary)] transition-colors"
         >
           {mode === 'password' ? 'Use magic link instead' : 'Use password instead'}
         </button>
 
         {message && (
-          <p className={`mt-4 text-sm ${isError ? 'text-red-400' : 'text-green-400'}`}>
+          <p className={`mt-4 text-sm ${isError ? 'text-[var(--color-error)]' : 'text-[var(--color-success)]'}`}>
             {message}
           </p>
         )}
