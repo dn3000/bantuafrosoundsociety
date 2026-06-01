@@ -88,6 +88,12 @@ export default function ArtistsListPage() {
               Import from playlist
             </Link>
             <Link
+              href="/admin/artists/backfill"
+              className="text-sm text-[var(--color-fg-secondary)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-4 py-2 hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] transition-colors"
+            >
+              Backfill
+            </Link>
+            <Link
               href="/admin/artists/new"
               className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-4 py-2 hover:bg-[var(--color-accent-hover)] transition-colors"
             >
