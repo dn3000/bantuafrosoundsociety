@@ -124,7 +124,8 @@ export async function fetchSpotifyPlaylistMeta(playlistId: string): Promise<Spot
     { headers: { Authorization: `Bearer ${token}` } }
   )
   if (!res.ok) {
-    throw new Error(`Spotify playlist meta fetch failed: ${res.status}`)
+    const body = await res.text().catch(() => '')
+    throw new Error(`Spotify playlist meta fetch failed: ${res.status} ${body.slice(0, 200)}`)
   }
   const data = await res.json() as {
     id: string
@@ -158,7 +159,8 @@ export async function fetchSpotifyPlaylistArtists(
     const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(artists(id,name))),next&limit=${pageSize}&offset=${offset}`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) {
-      throw new Error(`Spotify playlist tracks fetch failed: ${res.status}`)
+      const body = await res.text().catch(() => '')
+      throw new Error(`Spotify playlist tracks fetch failed: ${res.status} ${body.slice(0, 200)}`)
     }
     const data = await res.json() as {
       items: { track: { artists: { id: string; name: string }[] | null } | null }[]

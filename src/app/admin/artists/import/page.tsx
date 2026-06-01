@@ -171,8 +171,14 @@ export default function ImportArtistsPage() {
                 ))}
               </ul>
               {preview.failures.length > 0 && (
-                <div className="mt-3 text-sm text-[var(--color-error)]">
-                  Failed: {preview.failures.map((f) => f.url).join(', ')}
+                <div className="mt-3 space-y-1.5">
+                  <p className="text-sm font-semibold text-[var(--color-error)]">Failed playlists ({preview.failures.length})</p>
+                  {preview.failures.map((f) => (
+                    <div key={f.url} className="text-xs text-[var(--color-fg-secondary)] bg-[var(--color-bg-base)] rounded-[var(--radius-sm)] p-2">
+                      <div className="font-mono break-all">{f.url}</div>
+                      <div className="text-[var(--color-error)] mt-1">{f.error}</div>
+                    </div>
+                  ))}
                 </div>
               )}
               <div className="mt-4 text-sm text-[var(--color-fg-secondary)]">
