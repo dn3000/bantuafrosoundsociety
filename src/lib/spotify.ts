@@ -2,7 +2,7 @@
 // Spotify Client Credentials tokens last 1 hour.
 let tokenCache: { token: string; expiresAt: number } | null = null
 
-async function getAccessToken(): Promise<string> {
+export async function getAccessToken(): Promise<string> {
   if (tokenCache && tokenCache.expiresAt > Date.now() + 30_000) {
     return tokenCache.token
   }
@@ -91,4 +91,132 @@ export async function fetchSpotifyArtist(artistId: string): Promise<SpotifyArtis
     popularity: data.popularity ?? 0,
     externalUrl: data.external_urls?.spotify || null,
   }
+}
+
+export function extractSpotifyPlaylistId(input: string): string | null {
+  const trimmed = input.trim()
+  if (/^[0-9A-Za-z]{22}$/.test(trimmed)) return trimmed
+  const urlMatch = trimmed.match(/spotify\.com\/(?:intl-[a-z]+\/)?playlist\/([0-9A-Za-z]{22})/i)
+  if (urlMatch) return urlMatch[1]
+  const uriMatch = trimmed.match(/^spotify:playlist:([0-9A-Za-z]{22})$/i)
+  if (uriMatch) return uriMatch[1]
+  return null
+}
+
+export type SpotifyPlaylistMeta = {
+  id: string
+  name: string
+  description: string | null
+  imageUrl: string | null
+  ownerName: string | null
+  trackCount: number
+}
+
+export type SpotifyTrackArtist = {
+  id: string
+  name: string
+}
+
+export async function fetchSpotifyPlaylistMeta(playlistId: string): Promise<SpotifyPlaylistMeta> {
+  const token = await getAccessToken()
+  const res = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,images,owner(display_name),tracks(total)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  if (!res.ok) {
+    throw new Error(`Spotify playlist meta fetch failed: ${res.status}`)
+  }
+  const data = await res.json() as {
+    id: string
+    name: string
+    description: string | null
+    images: { url: string }[]
+    owner: { display_name: string | null }
+    tracks: { total: number }
+  }
+  return {
+    id: data.id,
+    name: data.name,
+    description: data.description,
+    imageUrl: data.images?.[0]?.url || null,
+    ownerName: data.owner?.display_name || null,
+    trackCount: data.tracks?.total ?? 0,
+  }
+}
+
+export async function fetchSpotifyPlaylistArtists(
+  playlistId: string,
+  maxTracks = 500
+): Promise<SpotifyTrackArtist[]> {
+  const token = await getAccessToken()
+  const seen = new Map<string, SpotifyTrackArtist>()
+  const pageSize = 100
+  let offset = 0
+  let totalFetched = 0
+
+  while (totalFetched < maxTracks) {
+    const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(artists(id,name))),next&limit=${pageSize}&offset=${offset}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) {
+      throw new Error(`Spotify playlist tracks fetch failed: ${res.status}`)
+    }
+    const data = await res.json() as {
+      items: { track: { artists: { id: string; name: string }[] | null } | null }[]
+      next: string | null
+    }
+    for (const item of data.items) {
+      const artists = item.track?.artists || []
+      for (const a of artists) {
+        if (a?.id && a?.name && !seen.has(a.id)) {
+          seen.set(a.id, { id: a.id, name: a.name })
+        }
+      }
+    }
+    totalFetched += data.items.length
+    if (!data.next || data.items.length < pageSize) break
+    offset += pageSize
+  }
+
+  return Array.from(seen.values())
+}
+
+export async function fetchSpotifyArtistsBulk(
+  artistIds: string[]
+): Promise<Array<{ id: string; name: string; genres: string[]; imageUrl: string | null; followers: number; popularity: number }>> {
+  const token = await getAccessToken()
+  const results: Array<{ id: string; name: string; genres: string[]; imageUrl: string | null; followers: number; popularity: number }> = []
+
+  const batchSize = 50
+  for (let i = 0; i < artistIds.length; i += batchSize) {
+    const batch = artistIds.slice(i, i + batchSize)
+    const url = `https://api.spotify.com/v1/artists?ids=${batch.join(',')}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) {
+      throw new Error(`Spotify artists batch fetch failed: ${res.status}`)
+    }
+    const data = await res.json() as {
+      artists: Array<{
+        id: string
+        name: string
+        genres: string[]
+        images: { url: string; width: number }[]
+        followers: { total: number }
+        popularity: number
+      } | null>
+    }
+    for (const a of data.artists) {
+      if (!a) continue
+      const sorted = [...(a.images || [])].sort((x, y) => (y.width || 0) - (x.width || 0))
+      results.push({
+        id: a.id,
+        name: a.name,
+        genres: a.genres || [],
+        imageUrl: sorted[0]?.url || null,
+        followers: a.followers?.total ?? 0,
+        popularity: a.popularity ?? 0,
+      })
+    }
+  }
+
+  return results
 }
