@@ -72,6 +72,10 @@ export default function BackfillPage() {
           setActiveJobId(data.jobId)
         }
         done = data.done === true
+        if (data.aborted) {
+          setError(data.abortReason || 'Backfill aborted (likely rate-limited). Wait a few minutes and retry.')
+          done = true
+        }
         // Refresh status display after each chunk
         await fetchStatus()
         // Small breather between chunks
