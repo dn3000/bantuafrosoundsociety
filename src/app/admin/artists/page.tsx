@@ -17,6 +17,8 @@ type Artist = {
   updated_at: string
 }
 
+const PAGE_SIZE = 50
+
 export default function ArtistsListPage() {
   const [artists, setArtists] = useState<Artist[]>([])
   const [total, setTotal] = useState(0)
@@ -24,6 +26,11 @@ export default function ArtistsListPage() {
   const [search, setSearch] = useState('')
   const [tierFilter, setTierFilter] = useState('')
   const [trackedFilter, setTrackedFilter] = useState('')
+  const [page, setPage] = useState(0)
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const showingFrom = total === 0 ? 0 : page * PAGE_SIZE + 1
+  const showingTo = Math.min(total, (page + 1) * PAGE_SIZE)
 
   const fetchArtists = useCallback(async () => {
     setLoading(true)
@@ -31,6 +38,8 @@ export default function ArtistsListPage() {
     if (search) params.set('search', search)
     if (tierFilter) params.set('tier', tierFilter)
     if (trackedFilter) params.set('tracked', trackedFilter)
+    params.set('limit', String(PAGE_SIZE))
+    params.set('offset', String(page * PAGE_SIZE))
     try {
       const res = await fetch(`/api/admin/artists?${params.toString()}`)
       const data = await res.json()
@@ -41,6 +50,11 @@ export default function ArtistsListPage() {
     } finally {
       setLoading(false)
     }
+  }, [search, tierFilter, trackedFilter, page])
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(0)
   }, [search, tierFilter, trackedFilter])
 
   useEffect(() => {
@@ -115,53 +129,92 @@ export default function ArtistsListPage() {
           <p className="text-sm text-[var(--color-fg-secondary)]">Loading…</p>
         ) : artists.length === 0 ? (
           <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-10 text-center">
-            <p className="text-[var(--color-fg-secondary)] mb-4">No artists yet.</p>
-            <Link
-              href="/admin/artists/new"
-              className="inline-block bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-4 py-2 hover:bg-[var(--color-accent-hover)] transition-colors"
-            >
-              Add the first artist
-            </Link>
+            <p className="text-[var(--color-fg-secondary)] mb-4">
+              {total === 0 ? 'No artists yet.' : 'No artists match your filters.'}
+            </p>
+            {total === 0 && (
+              <Link
+                href="/admin/artists/new"
+                className="inline-block bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-4 py-2 hover:bg-[var(--color-accent-hover)] transition-colors"
+              >
+                Add the first artist
+              </Link>
+            )}
           </div>
         ) : (
-          <ul className="space-y-2">
-            {artists.map((artist) => (
-              <li
-                key={artist.id}
-                className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-4 hover:bg-[var(--color-bg-higher)] transition-colors"
-              >
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-[var(--color-fg-primary)] truncate">
-                        {artist.name}
-                      </span>
-                      <TierBadge tier={artist.tier} />
-                      {artist.is_tracked ? (
-                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--color-accent-subtle)] text-[var(--color-accent)] font-semibold">
-                          tracked
+          <>
+            <div className="flex items-center justify-between mb-3 text-xs text-[var(--color-fg-tertiary)]">
+              <span>
+                Showing {showingFrom}–{showingTo} of {total}
+              </span>
+              <span>
+                Page {page + 1} of {totalPages}
+              </span>
+            </div>
+
+            <ul className="space-y-2">
+              {artists.map((artist) => (
+                <li
+                  key={artist.id}
+                  className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-4 hover:bg-[var(--color-bg-higher)] transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-[var(--color-fg-primary)] truncate">
+                          {artist.name}
                         </span>
-                      ) : (
-                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--color-bg-higher)] text-[var(--color-fg-tertiary)] font-semibold">
-                          stub
-                        </span>
-                      )}
-                      {artist.status !== 'active' && (
-                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--color-bg-higher)] text-[var(--color-fg-tertiary)] font-semibold">
-                          {artist.status}
-                        </span>
+                        <TierBadge tier={artist.tier} />
+                        {artist.is_tracked ? (
+                          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--color-accent-subtle)] text-[var(--color-accent)] font-semibold">
+                            tracked
+                          </span>
+                        ) : (
+                          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--color-bg-higher)] text-[var(--color-fg-tertiary)] font-semibold">
+                            stub
+                          </span>
+                        )}
+                        {artist.status !== 'active' && (
+                          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--color-bg-higher)] text-[var(--color-fg-tertiary)] font-semibold">
+                            {artist.status}
+                          </span>
+                        )}
+                      </div>
+                      {(artist.city || artist.country) && (
+                        <p className="text-xs text-[var(--color-fg-secondary)] mt-0.5">
+                          {[artist.city, artist.country].filter(Boolean).join(', ')}
+                        </p>
                       )}
                     </div>
-                    {(artist.city || artist.country) && (
-                      <p className="text-xs text-[var(--color-fg-secondary)] mt-0.5">
-                        {[artist.city, artist.country].filter(Boolean).join(', ')}
-                      </p>
-                    )}
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--color-border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="text-sm text-[var(--color-fg-secondary)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-4 py-2 hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ← Previous
+                </button>
+                <span className="text-xs text-[var(--color-fg-tertiary)]">
+                  Page {page + 1} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="text-sm text-[var(--color-fg-secondary)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-4 py-2 hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
