@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
   const playlistId = extractSpotifyPlaylistId(url)
   if (!playlistId) {
-    return NextResponse.json({ error: 'Could not parse playlist ID from URL' }, { status: 400 })
+    return NextResponse.json({ error: 'Could not parse playlist ID' }, { status: 400 })
   }
 
   const isEditorial = playlistId.startsWith('37i9dQZF1')
@@ -40,19 +40,41 @@ export async function POST(request: Request) {
     })
   }
 
-  const directRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  const directBody = await directRes.text()
+  async function tryCall(label: string, urlToFetch: string) {
+    const res = await fetch(urlToFetch, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const bodyText = await res.text()
+    return {
+      label,
+      url: urlToFetch,
+      status: res.status,
+      ok: res.ok,
+      bodyPreview: bodyText.slice(0, 400),
+    }
+  }
+
+  const results = await Promise.all([
+    tryCall('A_meta_no_fields', `https://api.spotify.com/v1/playlists/${playlistId}`),
+    tryCall(
+      'B_meta_with_fields',
+      `https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,images,owner(display_name),tracks(total)`
+    ),
+    tryCall(
+      'C_tracks_with_fields',
+      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(artists(id,name))),next&limit=100&offset=0`
+    ),
+    tryCall(
+      'D_tracks_no_fields',
+      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=0`
+    ),
+  ])
 
   return NextResponse.json({
     playlistId,
     isEditorial,
     tokenAcquired: true,
-    spotifyStatus: directRes.status,
-    spotifyBodyPreview: directBody.slice(0, 500),
-    note: isEditorial
-      ? 'This ID has the 37i9dQZF1 prefix, which indicates a Spotify-curated editorial playlist. As of late 2024, these are no longer accessible via Client Credentials auth — use user-created playlists instead.'
-      : 'This appears to be a user-created playlist; Client Credentials access should work.',
+    tests: results,
+    note: 'A/B compare meta with vs without fields param. C/D compare tracks endpoint same way.',
   })
 }
