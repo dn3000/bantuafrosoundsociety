@@ -52,25 +52,31 @@ export default function BackfillPage() {
     fetchStatus()
   }, [fetchStatus])
 
-  // Poll every 1.5 seconds while a job is running
-  useEffect(() => {
-    if (status?.job?.status === 'running') {
-      const interval = setInterval(fetchStatus, 1500)
-      return () => clearInterval(interval)
-    }
-  }, [status?.job?.status, fetchStatus])
+  // No polling — handleStart drives the chunked loop and calls fetchStatus after each chunk.
+  // (Removed setInterval — chunks return fast enough that we update UI per-chunk.)
 
   async function handleStart() {
     setStarting(true)
     setError(null)
+
     try {
-      const res = await fetch('/api/admin/artists/backfill/start', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to start backfill')
-      if (data.jobId) {
-        setActiveJobId(data.jobId)
+      // Loop: call /start repeatedly until done
+      let done = false
+      while (!done) {
+        const res = await fetch('/api/admin/artists/backfill/start', { method: 'POST' })
+        const data = await res.json()
+        if (!res.ok) {
+          throw new Error(data.error || 'Backfill chunk failed')
+        }
+        if (data.jobId) {
+          setActiveJobId(data.jobId)
+        }
+        done = data.done === true
+        // Refresh status display after each chunk
+        await fetchStatus()
+        // Small breather between chunks
+        if (!done) await new Promise((r) => setTimeout(r, 200))
       }
-      await fetchStatus()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -115,6 +121,23 @@ export default function BackfillPage() {
           <p className="text-sm text-[var(--color-fg-secondary)]">Loading…</p>
         ) : (
           <>
+            {isRunning && !starting && (
+              <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
+                <p className="text-sm text-[var(--color-fg-primary)] mb-4">
+                  A backfill job is in <strong>running</strong> state but isn&apos;t actively processing.
+                  This usually means the previous run was interrupted. Click below to resume.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleStart}
+                  disabled={starting}
+                  className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {starting ? 'Resuming…' : 'Resume backfill'}
+                </button>
+              </div>
+            )}
+
             {!isRunning && candidates > 0 && (
               <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
                 <p className="text-sm text-[var(--color-fg-primary)] mb-4">
