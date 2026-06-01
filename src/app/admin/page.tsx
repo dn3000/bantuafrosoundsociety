@@ -34,7 +34,7 @@ export default async function AdminDashboardPage() {
           </form>
         </header>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Link
             href="/admin/artists"
             className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
@@ -47,6 +47,14 @@ export default async function AdminDashboardPage() {
             <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Review Queue</h2>
             <p className="text-sm text-[var(--color-fg-tertiary)]">Coming soon.</p>
           </div>
+
+          <Link
+            href="/admin/integrations"
+            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
+          >
+            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Integrations</h2>
+            <p className="text-sm text-[var(--color-fg-secondary)]">Connect Spotify and other services.</p>
+          </Link>
         </div>
       </div>
     </div>

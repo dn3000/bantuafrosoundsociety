@@ -152,7 +152,21 @@ export default function ImportArtistsPage() {
             >
               {loading ? 'Fetching…' : 'Fetch & preview'}
             </button>
-            {error && <p className="text-sm text-[var(--color-error)]">{error}</p>}
+            {error && (
+              <div className="text-sm text-[var(--color-error)]">
+                {error}
+                {error.toLowerCase().includes('spotify not connected') && (
+                  <div className="mt-2">
+                    <Link
+                      href="/admin/integrations"
+                      className="text-[var(--color-accent)] hover:underline"
+                    >
+                      Go to Integrations →
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
           </form>
         )}
 

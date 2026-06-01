@@ -3,9 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import {
   extractSpotifyPlaylistId,
   fetchSpotifyPlaylistMeta,
-  fetchSpotifyPlaylistArtists,
+  fetchSpotifyPlaylistArtistsUserAuth,
   fetchSpotifyArtistsBulk,
 } from '@/lib/spotify'
+import { getSpotifyUserAccessToken } from '@/lib/integrations'
 
 const MAX_PLAYLISTS = 10
 const MAX_ARTISTS = 1000
@@ -15,6 +16,14 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const userSpotifyToken = await getSpotifyUserAccessToken()
+  if (!userSpotifyToken) {
+    return NextResponse.json(
+      { error: 'Spotify not connected. Go to Integrations and connect your Spotify account.' },
+      { status: 412 }
+    )
   }
 
   let body: { urls?: string[] }
@@ -48,7 +57,7 @@ export async function POST(request: Request) {
     playlists.map(async (p) => {
       try {
         const meta = await fetchSpotifyPlaylistMeta(p.id!)
-        const artists = await fetchSpotifyPlaylistArtists(p.id!)
+        const artists = await fetchSpotifyPlaylistArtistsUserAuth(p.id!, userSpotifyToken)
         return { ok: true as const, url: p.url, meta, artists }
       } catch (err) {
         return {
@@ -65,7 +74,7 @@ export async function POST(request: Request) {
     ok: true
     url: string
     meta: Awaited<ReturnType<typeof fetchSpotifyPlaylistMeta>>
-    artists: Awaited<ReturnType<typeof fetchSpotifyPlaylistArtists>>
+    artists: Awaited<ReturnType<typeof fetchSpotifyPlaylistArtistsUserAuth>>
   }>
 
   const uniqueMap = new Map<string, { id: string; name: string; foundIn: string[] }>()
