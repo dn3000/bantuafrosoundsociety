@@ -137,6 +137,12 @@ export default function ArtistsListPage() {
               Backfill
             </Link>
             <Link
+              href="/admin/artists/musicbrainz"
+              className="text-sm text-[var(--color-fg-secondary)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-4 py-2 hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] transition-colors"
+            >
+              MusicBrainz
+            </Link>
+            <Link
               href="/admin/artists/import"
               className="text-sm text-[var(--color-fg-secondary)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-4 py-2 hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] transition-colors"
             >
