@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { fetchSpotifyArtistsBulk } from '@/lib/spotify'
 
 const MAX_IMPORT = 1000
 const ALLOWED_TIERS = ['featured', 'active', 'watch']
@@ -16,6 +15,13 @@ function slugify(input: string): string {
     .slice(0, 80)
 }
 
+type IncomingArtist = {
+  spotifyId: string
+  name: string
+  imageUrl: string | null
+  genres: string[]
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -24,7 +30,7 @@ export async function POST(request: Request) {
   }
 
   let body: {
-    spotifyIds?: string[]
+    artists?: IncomingArtist[]
     tier?: string
     status?: string
     isTracked?: boolean
@@ -35,41 +41,52 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const ids = Array.isArray(body.spotifyIds) ? body.spotifyIds.filter((s) => typeof s === 'string') : []
-  if (ids.length === 0) {
-    return NextResponse.json({ error: 'No artists selected' }, { status: 400 })
+  const incoming = Array.isArray(body.artists) ? body.artists : []
+  if (incoming.length === 0) {
+    return NextResponse.json({ error: 'No artists provided' }, { status: 400 })
   }
-  if (ids.length > MAX_IMPORT) {
+  if (incoming.length > MAX_IMPORT) {
     return NextResponse.json({ error: `Max ${MAX_IMPORT} per import` }, { status: 400 })
+  }
+
+  // Sanitize
+  const cleaned: IncomingArtist[] = incoming
+    .filter((a) => typeof a?.spotifyId === 'string' && typeof a?.name === 'string')
+    .map((a) => ({
+      spotifyId: a.spotifyId,
+      name: a.name.trim(),
+      imageUrl: typeof a.imageUrl === 'string' ? a.imageUrl : null,
+      genres: Array.isArray(a.genres) ? a.genres.filter((g) => typeof g === 'string') : [],
+    }))
+
+  if (cleaned.length === 0) {
+    return NextResponse.json({ error: 'No valid artists in payload' }, { status: 400 })
   }
 
   const tier = ALLOWED_TIERS.includes(body.tier as string) ? (body.tier as string) : 'watch'
   const status = ALLOWED_STATUSES.includes(body.status as string) ? (body.status as string) : 'active'
   const isTracked = body.isTracked === true
 
+  // Skip any that already exist
+  const spotifyIds = cleaned.map((a) => a.spotifyId)
   const { data: existing } = await supabase
     .from('artists')
     .select('spotify_artist_id')
-    .in('spotify_artist_id', ids)
+    .in('spotify_artist_id', spotifyIds)
   const existingSet = new Set((existing || []).map((row) => row.spotify_artist_id as string))
-  const newIds = ids.filter((id) => !existingSet.has(id))
+  const newArtists = cleaned.filter((a) => !existingSet.has(a.spotifyId))
 
-  if (newIds.length === 0) {
-    return NextResponse.json({ imported: 0, skipped: ids.length, message: 'All selected artists already exist' })
+  if (newArtists.length === 0) {
+    return NextResponse.json({
+      imported: 0,
+      skipped: cleaned.length,
+      message: 'All selected artists already exist',
+    })
   }
 
-  let spotifyArtists: Awaited<ReturnType<typeof fetchSpotifyArtistsBulk>>
-  try {
-    spotifyArtists = await fetchSpotifyArtistsBulk(newIds)
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Spotify bulk fetch failed' },
-      { status: 502 }
-    )
-  }
-
+  // Build insert rows
   const usedSlugs = new Set<string>()
-  const rows = spotifyArtists.map((a) => {
+  const rows = newArtists.map((a) => {
     let base = slugify(a.name)
     if (!base) base = 'artist'
     let candidate = base
@@ -84,7 +101,7 @@ export async function POST(request: Request) {
     return {
       name: a.name,
       slug: candidate,
-      spotify_artist_id: a.id,
+      spotify_artist_id: a.spotifyId,
       image_url: a.imageUrl,
       spotify_genres: a.genres,
       country: 'South Africa',

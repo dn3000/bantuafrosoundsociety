@@ -96,7 +96,14 @@ export default function ImportArtistsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          spotifyIds: Array.from(selected),
+          artists: preview!.artists
+            .filter((a) => selected.has(a.spotifyId))
+            .map((a) => ({
+              spotifyId: a.spotifyId,
+              name: a.name,
+              imageUrl: a.imageUrl,
+              genres: a.genres,
+            })),
           tier: bulkTier,
           status: bulkStatus,
           isTracked: bulkTracked,
