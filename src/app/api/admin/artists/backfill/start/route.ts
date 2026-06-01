@@ -2,10 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAccessToken } from '@/lib/spotify'
 
-const CHUNK_SIZE = 25
-const BASE_DELAY_MS = 300
-const MAX_RETRIES_PER_ARTIST = 2
-const ABORT_CHUNK_AT_ERROR_RATE = 0.5 // Abort chunk if >50% of attempts fail
+const CHUNK_SIZE = 10  // Small chunks to stay well under Vercel limits
+const DELAY_MS = 400   // ~2.5 req/sec sustained — comfortable for Spotify
 
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -13,53 +11,44 @@ async function sleep(ms: number) {
 
 type FetchResult =
   | { ok: true; imageUrl: string | null; genres: string[]; followers: number; popularity: number }
-  | { ok: false; error: string; rateLimited: boolean; retryAfter: number }
+  | { ok: false; error: string; rateLimited: boolean }
 
-async function fetchSpotifyArtistWithRetry(
+async function fetchSpotifyArtist(
   artistId: string,
-  token: string,
-  retries = MAX_RETRIES_PER_ARTIST
+  token: string
 ): Promise<FetchResult> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+  const res = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
 
-    if (res.ok) {
-      const data = await res.json() as {
-        genres: string[]
-        images: { url: string; width: number }[]
-        followers: { total: number }
-        popularity: number
-      }
-      const sorted = [...(data.images || [])].sort((a, b) => (b.width || 0) - (a.width || 0))
-      return {
-        ok: true,
-        imageUrl: sorted[0]?.url || null,
-        genres: data.genres || [],
-        followers: data.followers?.total ?? 0,
-        popularity: data.popularity ?? 0,
-      }
+  if (res.ok) {
+    const data = await res.json() as {
+      genres: string[]
+      images: { url: string; width: number }[]
+      followers: { total: number }
+      popularity: number
     }
-
-    if (res.status === 429) {
-      const retryAfter = parseInt(res.headers.get('Retry-After') || '5', 10)
-      if (attempt < retries) {
-        await sleep((retryAfter + 1) * 1000)
-        continue
-      }
-      return { ok: false, error: `Rate limited (429), retry-after ${retryAfter}s`, rateLimited: true, retryAfter }
-    }
-
-    const body = await res.text().catch(() => '')
+    const sorted = [...(data.images || [])].sort((a, b) => (b.width || 0) - (a.width || 0))
     return {
-      ok: false,
-      error: `Spotify ${res.status}: ${body.slice(0, 150)}`,
-      rateLimited: false,
-      retryAfter: 0,
+      ok: true,
+      imageUrl: sorted[0]?.url || null,
+      genres: data.genres || [],
+      followers: data.followers?.total ?? 0,
+      popularity: data.popularity ?? 0,
     }
   }
-  return { ok: false, error: 'Exhausted retries', rateLimited: false, retryAfter: 0 }
+
+  // Fail fast — do NOT retry in this function
+  if (res.status === 429) {
+    return { ok: false, error: 'Rate limited (429)', rateLimited: true }
+  }
+
+  const body = await res.text().catch(() => '')
+  return {
+    ok: false,
+    error: `Spotify ${res.status}: ${body.slice(0, 100)}`,
+    rateLimited: false,
+  }
 }
 
 export async function POST(request: Request) {
@@ -104,6 +93,46 @@ export async function POST(request: Request) {
     job = newJob
   }
 
+  // Get Spotify token (fails fast if Spotify auth itself is broken)
+  let token: string
+  try {
+    token = await getAccessToken()
+  } catch (err) {
+    return NextResponse.json({
+      jobId: job.id,
+      done: false,
+      aborted: true,
+      abortReason: `Spotify auth failed: ${err instanceof Error ? err.message : 'unknown'}`,
+    })
+  }
+
+  // PRE-FLIGHT CHECK: ping Spotify with one cheap call before processing the chunk.
+  // If we're rate-limited, abort the whole chunk without burning artist quota.
+  // Use a known-good artist (Kululu? any well-known SA artist). Actually safest: use Spotify's own /me-equivalent
+  // which doesn't require user auth — fetch a single well-known artist by ID.
+  // We use Black Coffee's Spotify ID (4KeYsoSjcofz3jJVvuhX0E) which is stable.
+  const preflightRes = await fetch(
+    'https://api.spotify.com/v1/artists/4KeYsoSjcofz3jJVvuhX0E',
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  if (preflightRes.status === 429) {
+    return NextResponse.json({
+      jobId: job.id,
+      done: false,
+      aborted: true,
+      abortReason: 'Spotify is currently rate-limiting us. Wait 5-10 minutes and try again.',
+      remaining: job.total_count - job.processed_count,
+    })
+  }
+  if (!preflightRes.ok) {
+    return NextResponse.json({
+      jobId: job.id,
+      done: false,
+      aborted: true,
+      abortReason: `Spotify preflight failed: ${preflightRes.status}`,
+    })
+  }
+
   // Fetch next chunk of candidates
   const { data: candidates } = await supabase
     .from('artists')
@@ -127,35 +156,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ jobId: job.id, done: true, message: 'Backfill complete' })
   }
 
-  // Get Spotify token once for the whole chunk
-  let token: string
-  try {
-    token = await getAccessToken()
-  } catch (err) {
-    return NextResponse.json({
-      error: `Spotify token error: ${err instanceof Error ? err.message : 'unknown'}`,
-    }, { status: 502 })
-  }
-
   let successCount = job.success_count
   let errorCount = job.error_count
   let lastError: string | null = job.last_error
   let lastArtistName: string | null = job.last_processed_artist_name
-  let processedThisChunk = 0
-  let errorsThisChunk = 0
+  let chunkRateLimited = false
   const today = new Date().toISOString().slice(0, 10)
-  let aborted = false
-  let abortReason: string | null = null
 
   for (const artist of targets) {
-    // Safety check: bail if too many errors in this chunk
-    if (processedThisChunk >= 5 && errorsThisChunk / processedThisChunk >= ABORT_CHUNK_AT_ERROR_RATE) {
-      aborted = true
-      abortReason = `Aborted chunk: ${errorsThisChunk}/${processedThisChunk} errors (>= ${ABORT_CHUNK_AT_ERROR_RATE * 100}%). Likely rate-limited.`
-      break
-    }
-
-    const result = await fetchSpotifyArtistWithRetry(artist.spotify_artist_id as string, token)
+    const result = await fetchSpotifyArtist(artist.spotify_artist_id as string, token)
 
     if (result.ok) {
       const auditLine = `Backfilled ${today}: Spotify followers ${result.followers.toLocaleString()}, popularity ${result.popularity}`
@@ -174,38 +183,35 @@ export async function POST(request: Request) {
 
       if (updateError) {
         errorCount++
-        errorsThisChunk++
-        lastError = `${artist.name}: DB update failed - ${updateError.message}`
+        lastError = `${artist.name}: DB update - ${updateError.message}`
       } else {
         successCount++
       }
+    } else if (result.rateLimited) {
+      // Got 429 mid-chunk — exit immediately, don't burn more credit
+      chunkRateLimited = true
+      lastError = `Rate limited after ${artist.name}. Wait 5-10 min and resume.`
+      break
     } else {
+      // Non-429 error — mark sentinel and move on (don't retry next chunk)
       errorCount++
-      errorsThisChunk++
       lastError = `${artist.name}: ${result.error}`
-
-      // If artist has no image and persistently fails, mark image_url with a sentinel
-      // so we don't keep retrying them every chunk
-      if (!result.rateLimited) {
-        await supabase
-          .from('artists')
-          .update({
-            image_url: 'no_spotify_image',
-            private_notes: artist.private_notes
-              ? `${artist.private_notes}\nBackfill ${today}: marked no_spotify_image after error: ${result.error.slice(0, 100)}`
-              : `Backfill ${today}: marked no_spotify_image after error: ${result.error.slice(0, 100)}`,
-          })
-          .eq('id', artist.id)
-      }
+      await supabase
+        .from('artists')
+        .update({
+          image_url: 'no_spotify_image',
+          private_notes: artist.private_notes
+            ? `${artist.private_notes}\nBackfill ${today}: no_spotify_image (${result.error.slice(0, 80)})`
+            : `Backfill ${today}: no_spotify_image (${result.error.slice(0, 80)})`,
+        })
+        .eq('id', artist.id)
     }
 
-    processedThisChunk++
     lastArtistName = artist.name
-
-    await sleep(BASE_DELAY_MS)
+    await sleep(DELAY_MS)
   }
 
-  // Compute actual processed count: remaining unprocessed candidates
+  // Derive processed_count from "what's left" so it can't inflate
   const { count: stillRemaining } = await supabase
     .from('artists')
     .select('id', { count: 'exact', head: true })
@@ -228,12 +234,12 @@ export async function POST(request: Request) {
   return NextResponse.json({
     jobId: job.id,
     done: false,
-    processedThisChunk,
-    errorsThisChunk,
+    aborted: chunkRateLimited,
+    abortReason: chunkRateLimited
+      ? 'Spotify rate-limited us mid-chunk. Wait 5-10 minutes and click Resume.'
+      : null,
     totalProcessed: actualProcessed,
     total: job.total_count,
-    aborted,
-    abortReason,
     remaining: stillRemaining ?? 0,
   })
 }
