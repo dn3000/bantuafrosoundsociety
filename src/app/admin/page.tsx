@@ -35,13 +35,10 @@ export default async function AdminDashboardPage() {
         </header>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Link
-            href="/admin/tracks/new"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Add Track</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Manually add a track to the catalog.</p>
-          </Link>
+          <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 opacity-50 cursor-not-allowed">
+            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Add Artist — coming soon</h2>
+            <p className="text-sm text-[var(--color-fg-tertiary)]">Coming soon.</p>
+          </div>
 
           <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 opacity-50 cursor-not-allowed">
             <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Review Queue</h2>
