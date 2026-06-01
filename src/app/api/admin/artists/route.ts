@@ -88,6 +88,9 @@ export async function POST(request: Request) {
     city: typeof body.city === 'string' ? body.city.trim() || null : null,
     subgenres: Array.isArray(body.subgenres) ? body.subgenres.filter((s) => typeof s === 'string') : [],
     bio: typeof body.bio === 'string' ? body.bio.trim() || null : null,
+    image_url: typeof body.image_url === 'string' ? body.image_url.trim() || null : null,
+    spotify_artist_id: typeof body.spotify_artist_id === 'string' ? body.spotify_artist_id.trim() || null : null,
+    private_notes: typeof body.private_notes === 'string' ? body.private_notes.trim() || null : null,
     added_by: user.id,
   }
 

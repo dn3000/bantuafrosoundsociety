@@ -10,8 +10,29 @@ const SUBGENRE_OPTIONS = [
   'bacardi', 'sgubhu',
 ]
 
+type Enrichment = {
+  name: string
+  bio: string | null
+  imageUrl: string | null
+  spotifyArtistId: string
+  spotifyUrl: string | null
+  spotifyFollowers: number
+  spotifyPopularity: number
+  spotifyGenres: string[]
+  suggestedSubgenres: string[]
+  suggestedCity: string | null
+  suggestedCountry: string
+  notes: string | null
+}
+
 export default function NewArtistPage() {
   const router = useRouter()
+
+  const [enrichUrl, setEnrichUrl] = useState('')
+  const [enriching, setEnriching] = useState(false)
+  const [enrichError, setEnrichError] = useState<string | null>(null)
+  const [enrichmentNote, setEnrichmentNote] = useState<string | null>(null)
+
   const [name, setName] = useState('')
   const [tier, setTier] = useState('active')
   const [status, setStatus] = useState('active')
@@ -20,6 +41,10 @@ export default function NewArtistPage() {
   const [city, setCity] = useState('')
   const [bio, setBio] = useState('')
   const [subgenres, setSubgenres] = useState<string[]>([])
+  const [imageUrl, setImageUrl] = useState('')
+  const [spotifyArtistId, setSpotifyArtistId] = useState('')
+  const [privateNotes, setPrivateNotes] = useState('')
+
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -27,6 +52,46 @@ export default function NewArtistPage() {
     setSubgenres((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
     )
+  }
+
+  async function handleEnrich(e: React.FormEvent) {
+    e.preventDefault()
+    if (!enrichUrl.trim()) return
+    setEnriching(true)
+    setEnrichError(null)
+    setEnrichmentNote(null)
+    try {
+      const res = await fetch('/api/admin/artists/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: enrichUrl.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Enrichment failed')
+      }
+      const e: Enrichment = data.enrichment
+      // Prefill form fields
+      setName(e.name)
+      if (e.bio) setBio(e.bio)
+      if (e.imageUrl) setImageUrl(e.imageUrl)
+      setSpotifyArtistId(e.spotifyArtistId)
+      if (e.suggestedCity) setCity(e.suggestedCity)
+      if (e.suggestedCountry) setCountry(e.suggestedCountry)
+      if (e.suggestedSubgenres.length > 0) {
+        setSubgenres((prev) => Array.from(new Set([...prev, ...e.suggestedSubgenres])))
+      }
+      if (e.notes) {
+        setPrivateNotes((prev) => (prev ? `${prev}\n\n${e.notes}` : e.notes!))
+      }
+      setEnrichmentNote(
+        `Loaded from Spotify · ${e.spotifyFollowers.toLocaleString()} followers · popularity ${e.spotifyPopularity}/100`
+      )
+    } catch (err) {
+      setEnrichError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setEnriching(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -46,6 +111,9 @@ export default function NewArtistPage() {
           city: city || undefined,
           bio: bio || undefined,
           subgenres,
+          image_url: imageUrl || undefined,
+          spotify_artist_id: spotifyArtistId || undefined,
+          private_notes: privateNotes || undefined,
         }),
       })
       const data = await res.json()
@@ -73,6 +141,44 @@ export default function NewArtistPage() {
           </Link>
         </div>
 
+        {/* Quick add from URL */}
+        <form
+          onSubmit={handleEnrich}
+          className="mb-8 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5"
+        >
+          <div className="mb-3">
+            <h2 className="text-sm font-semibold text-[var(--color-fg-primary)]">
+              Quick add from URL
+            </h2>
+            <p className="text-xs text-[var(--color-fg-tertiary)] mt-1">
+              Paste a Spotify artist URL — we&rsquo;ll fetch the metadata and pre-fill the form.
+            </p>
+          </div>
+          <div className="flex gap-2 flex-col sm:flex-row">
+            <input
+              type="url"
+              placeholder="https://open.spotify.com/artist/..."
+              value={enrichUrl}
+              onChange={(e) => setEnrichUrl(e.target.value)}
+              className="flex-1 bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-3 py-2 text-sm text-[var(--color-fg-primary)] placeholder:text-[var(--color-fg-tertiary)] focus:border-[var(--color-border-strong)] transition-colors"
+            />
+            <button
+              type="submit"
+              disabled={enriching || !enrichUrl.trim()}
+              className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] text-sm font-semibold rounded-[var(--radius)] px-4 py-2 hover:bg-[var(--color-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {enriching ? 'Enriching…' : 'Enrich'}
+            </button>
+          </div>
+          {enrichError && (
+            <p className="text-xs text-[var(--color-error)] mt-2">{enrichError}</p>
+          )}
+          {enrichmentNote && (
+            <p className="text-xs text-[var(--color-fg-secondary)] mt-2">{enrichmentNote}</p>
+          )}
+        </form>
+
+        {/* Main form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           <Field label="Name *">
             <input
@@ -83,6 +189,27 @@ export default function NewArtistPage() {
               placeholder="e.g. Kususa"
             />
           </Field>
+
+          {imageUrl && (
+            <div className="flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imageUrl}
+                alt={name || 'artist'}
+                className="w-16 h-16 rounded-[var(--radius)] object-cover"
+              />
+              <div className="text-xs text-[var(--color-fg-tertiary)] flex-1 break-all">
+                {imageUrl}
+              </div>
+              <button
+                type="button"
+                onClick={() => setImageUrl('')}
+                className="text-xs text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)]"
+              >
+                Clear
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Tier">
@@ -158,6 +285,23 @@ export default function NewArtistPage() {
             />
           </Field>
 
+          {privateNotes && (
+            <Field label="Private notes (admin only)">
+              <textarea
+                rows={2}
+                value={privateNotes}
+                onChange={(e) => setPrivateNotes(e.target.value)}
+                className={inputClass}
+              />
+            </Field>
+          )}
+
+          {spotifyArtistId && (
+            <div className="text-xs text-[var(--color-fg-tertiary)]">
+              Spotify Artist ID: <span className="font-mono">{spotifyArtistId}</span>
+            </div>
+          )}
+
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
@@ -185,9 +329,7 @@ export default function NewArtistPage() {
             </button>
           </div>
 
-          {error && (
-            <p className="text-sm text-[var(--color-error)]">{error}</p>
-          )}
+          {error && <p className="text-sm text-[var(--color-error)]">{error}</p>}
         </form>
       </div>
     </div>
