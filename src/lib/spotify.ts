@@ -156,18 +156,23 @@ export async function fetchSpotifyPlaylistArtists(
   let totalFetched = 0
 
   while (totalFetched < maxTracks) {
-    const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(artists(id,name))),next&limit=${pageSize}&offset=${offset}`
+    const url = `https://api.spotify.com/v1/playlists/${playlistId}/items?fields=items(item(artists(id,name))),next&limit=${pageSize}&offset=${offset}`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`Spotify playlist tracks fetch failed: ${res.status} ${body.slice(0, 200)}`)
     }
     const data = await res.json() as {
-      items: { track: { artists: { id: string; name: string }[] | null } | null }[]
+      items: Array<{
+        item?: { artists: { id: string; name: string }[] | null } | null
+        track?: { artists: { id: string; name: string }[] | null } | null
+      }>
       next: string | null
     }
     for (const item of data.items) {
-      const artists = item.track?.artists || []
+      // Handle both new response shape (items[].item) and old (items[].track)
+      const wrapper = item.item || item.track
+      const artists = wrapper?.artists || []
       for (const a of artists) {
         if (a?.id && a?.name && !seen.has(a.id)) {
           seen.set(a.id, { id: a.id, name: a.name })
@@ -307,18 +312,23 @@ export async function fetchSpotifyPlaylistArtistsUserAuth(
   let totalFetched = 0
 
   while (totalFetched < maxTracks) {
-    const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(artists(id,name))),next&limit=${pageSize}&offset=${offset}`
+    const url = `https://api.spotify.com/v1/playlists/${playlistId}/items?fields=items(item(artists(id,name))),next&limit=${pageSize}&offset=${offset}`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`Spotify playlist tracks (user auth) failed: ${res.status} ${body.slice(0, 200)}`)
     }
     const data = await res.json() as {
-      items: { track: { artists: { id: string; name: string }[] | null } | null }[]
+      items: Array<{
+        item?: { artists: { id: string; name: string }[] | null } | null
+        track?: { artists: { id: string; name: string }[] | null } | null
+      }>
       next: string | null
     }
     for (const item of data.items) {
-      const artists = item.track?.artists || []
+      // Handle both new response shape (items[].item) and old (items[].track)
+      const wrapper = item.item || item.track
+      const artists = wrapper?.artists || []
       for (const a of artists) {
         if (a?.id && a?.name && !seen.has(a.id)) {
           seen.set(a.id, { id: a.id, name: a.name })

@@ -65,6 +65,10 @@ export async function POST(request: Request) {
     tryCall('playlist_tracks', `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=10`),
     // 5. Same target as 4 but with explicit market parameter
     tryCall('playlist_tracks_market', `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=10&market=ZA`),
+    // 6. New /items endpoint (March 2026 migration)
+    tryCall('playlist_items_new', `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=10`),
+    // 7. New /items endpoint with fields parameter
+    tryCall('playlist_items_new_with_fields', `https://api.spotify.com/v1/playlists/${playlistId}/items?fields=items(item(artists(id,name))),next&limit=10`),
   ])
 
   return NextResponse.json({
