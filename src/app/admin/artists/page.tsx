@@ -215,10 +215,11 @@ export default function ArtistsListPage() {
 
             <ul className="space-y-2">
               {artists.map((artist) => (
-                <li
-                  key={artist.id}
-                  className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-colors"
-                >
+                <li key={artist.id}>
+                  <Link
+                    href={`/admin/artists/${artist.slug}/edit`}
+                    className="block bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-colors"
+                  >
                   <div className="flex items-center gap-3">
                     <ArtistAvatar artist={artist} />
                     <div className="flex-1 min-w-0">
@@ -249,6 +250,7 @@ export default function ArtistsListPage() {
                       )}
                     </div>
                   </div>
+                  </Link>
                 </li>
               ))}
             </ul>
