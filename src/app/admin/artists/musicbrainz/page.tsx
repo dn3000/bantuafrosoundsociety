@@ -110,6 +110,8 @@ export default function MusicBrainzPage() {
           </p>
         </div>
 
+        <ExtractSocialsCard />
+
         {loading ? (
           <p className="text-sm text-[var(--color-fg-secondary)]">Loading…</p>
         ) : (
@@ -226,6 +228,70 @@ export default function MusicBrainzPage() {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+function ExtractSocialsCard() {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{
+    processed: number
+    updated: number
+    byColumn: Record<string, number>
+  } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleExtract() {
+    setRunning(true)
+    setError(null)
+    setResult(null)
+    try {
+      const res = await fetch('/api/admin/artists/extract-socials', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Extraction failed')
+      setResult(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
+      <h2 className="text-sm font-semibold text-[var(--color-fg-primary)] mb-2">
+        Extract socials from MB notes
+      </h2>
+      <p className="text-sm text-[var(--color-fg-secondary)] mb-4">
+        Parses Bandcamp, SoundCloud, Discogs, Wikipedia, and YouTube URLs from existing
+        MusicBrainz audit notes (already in <code>private_notes</code>) into proper columns.
+        Only fills NULL fields. Safe to run multiple times.
+      </p>
+      <button
+        type="button"
+        onClick={handleExtract}
+        disabled={running}
+        className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] text-sm font-semibold rounded-[var(--radius)] px-4 py-2 hover:bg-[var(--color-accent-hover)] disabled:opacity-50 transition-colors"
+      >
+        {running ? 'Extracting…' : 'Extract socials'}
+      </button>
+      {error && (
+        <p className="text-sm text-[var(--color-error)] mt-3">{error}</p>
+      )}
+      {result && (
+        <div className="mt-4 text-xs text-[var(--color-fg-secondary)]">
+          <p>
+            Processed {result.processed} artists, updated {result.updated}.
+          </p>
+          <ul className="mt-2 space-y-0.5 font-mono">
+            {Object.entries(result.byColumn).map(([col, count]) => (
+              <li key={col}>
+                {col}: <span className="text-[var(--color-fg-primary)]">{count}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
