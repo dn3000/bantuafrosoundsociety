@@ -217,7 +217,7 @@ export default function ArtistsListPage() {
               {artists.map((artist) => (
                 <li key={artist.id}>
                   <Link
-                    href={`/admin/artists/${artist.slug}/edit`}
+                    href={`/admin/artists/${artist.slug}`}
                     className="block bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-colors"
                   >
                   <div className="flex items-center gap-3">
