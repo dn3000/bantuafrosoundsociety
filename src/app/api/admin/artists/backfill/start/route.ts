@@ -106,32 +106,43 @@ export async function POST(request: Request) {
     })
   }
 
-  // PRE-FLIGHT CHECK: ping Spotify with one cheap call before processing the chunk.
-  // If we're rate-limited, abort the whole chunk without burning artist quota.
-  // Use a known-good artist (Kululu? any well-known SA artist). Actually safest: use Spotify's own /me-equivalent
-  // which doesn't require user auth — fetch a single well-known artist by ID.
-  // We use Black Coffee's Spotify ID (4KeYsoSjcofz3jJVvuhX0E) which is stable.
-  const preflightRes = await fetch(
-    'https://api.spotify.com/v1/artists/4KeYsoSjcofz3jJVvuhX0E',
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
-  if (preflightRes.status === 429) {
-    return NextResponse.json({
-      jobId: job.id,
-      done: false,
-      aborted: true,
-      abortReason: 'Spotify is currently rate-limiting us. Wait 5-10 minutes and try again.',
-      remaining: job.total_count - job.processed_count,
-    })
+  // Preflight: use an artist from our DB that already has a valid image_url.
+  // These have proven Spotify IDs (they returned 200 on previous backfill runs).
+  // If none exist (first ever backfill), fall back to skipping the preflight.
+  const { data: canaryArtist } = await supabase
+    .from('artists')
+    .select('spotify_artist_id, name')
+    .not('image_url', 'is', null)
+    .neq('image_url', 'no_spotify_image')
+    .not('spotify_artist_id', 'is', null)
+    .limit(1)
+    .maybeSingle()
+
+  if (canaryArtist?.spotify_artist_id) {
+    const preflightRes = await fetch(
+      `https://api.spotify.com/v1/artists/${canaryArtist.spotify_artist_id}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (preflightRes.status === 429) {
+      return NextResponse.json({
+        jobId: job.id,
+        done: false,
+        aborted: true,
+        abortReason: 'Spotify is currently rate-limiting us. Wait 5-10 minutes and try again.',
+        remaining: job.total_count - job.processed_count,
+      })
+    }
+    if (!preflightRes.ok) {
+      const body = await preflightRes.text().catch(() => '')
+      return NextResponse.json({
+        jobId: job.id,
+        done: false,
+        aborted: true,
+        abortReason: `Spotify preflight failed for "${canaryArtist.name}" (${canaryArtist.spotify_artist_id}): ${preflightRes.status} ${body.slice(0, 150)}`,
+      })
+    }
   }
-  if (!preflightRes.ok) {
-    return NextResponse.json({
-      jobId: job.id,
-      done: false,
-      aborted: true,
-      abortReason: `Spotify preflight failed: ${preflightRes.status}`,
-    })
-  }
+  // If no canary artist exists, skip preflight — we'll learn from the first real call
 
   // Fetch next chunk of candidates
   const { data: candidates } = await supabase
