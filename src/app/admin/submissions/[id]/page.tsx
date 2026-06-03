@@ -6,7 +6,7 @@ import Link from 'next/link'
 
 type Submission = {
   id: string
-  type: 'track' | 'release' | 'mix' | 'event'
+  type: 'single' | 'release' | 'mix' | 'dj_set' | 'playlist' | 'video' | 'podcast'
   title: string
   source_url: string | null
   artwork_url: string | null

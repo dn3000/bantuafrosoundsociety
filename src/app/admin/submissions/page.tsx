@@ -5,7 +5,7 @@ import Link from 'next/link'
 
 type Submission = {
   id: string
-  type: 'track' | 'release' | 'mix' | 'event'
+  type: 'single' | 'release' | 'mix' | 'dj_set' | 'playlist' | 'video' | 'podcast'
   title: string
   source_url: string | null
   description: string | null
@@ -126,10 +126,13 @@ export default function SubmissionsPage() {
             className={inputCls}
           >
             <option value="">All types</option>
-            <option value="track">Track</option>
-            <option value="release">Release</option>
+            <option value="single">Single (track)</option>
+            <option value="release">Release (EP/Album)</option>
             <option value="mix">Mix</option>
-            <option value="event">Event</option>
+            <option value="dj_set">DJ Set</option>
+            <option value="playlist">Playlist</option>
+            <option value="video">Video</option>
+            <option value="podcast">Podcast</option>
           </select>
           <div className="flex items-center gap-1">
             <button

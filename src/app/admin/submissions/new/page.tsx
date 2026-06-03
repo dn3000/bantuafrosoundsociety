@@ -26,7 +26,7 @@ export default function NewSubmissionPage() {
   const [results, setResults] = useState<ArtistOption[]>([])
   const [selectedArtist, setSelectedArtist] = useState<ArtistOption | null>(null)
   const [title, setTitle] = useState('')
-  const [submissionType, setSubmissionType] = useState('track')
+  const [submissionType, setSubmissionType] = useState('single')
   const [url, setUrl] = useState('')
   const [coverImageUrl, setCoverImageUrl] = useState('')
   const [description, setDescription] = useState('')
@@ -200,10 +200,13 @@ export default function NewSubmissionPage() {
                 onChange={(e) => setSubmissionType(e.target.value)}
                 className={inputCls}
               >
-                <option value="track">Track</option>
-                <option value="release">Release / Album</option>
+                <option value="single">Single (track)</option>
+                <option value="release">Release (EP/Album)</option>
                 <option value="mix">Mix</option>
-                <option value="event">Event</option>
+                <option value="dj_set">DJ Set</option>
+                <option value="playlist">Playlist</option>
+                <option value="video">Video</option>
+                <option value="podcast">Podcast</option>
               </select>
             </Field>
             <Field label="URL (Spotify, YouTube, SoundCloud, etc.)">

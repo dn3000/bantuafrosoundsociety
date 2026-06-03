@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const ALLOWED_TYPES = ['track', 'release', 'mix', 'event'] as const
+const ALLOWED_TYPES = ['single', 'release', 'mix', 'dj_set', 'playlist', 'video', 'podcast'] as const
 const ALLOWED_STATUSES = ['pending', 'approved', 'rejected', 'deferred', 'needs_work'] as const
 const ALLOWED_PRIORITIES = ['low', 'normal', 'high'] as const
 
