@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { parseSpotifyUrl, fetchSpotifyReleaseArtwork } from '@/lib/spotify'
 
 const ALLOWED_TYPES = ['single', 'release', 'mix', 'dj_set', 'playlist', 'video', 'podcast'] as const
 const ALLOWED_STATUSES = ['pending', 'approved', 'rejected', 'deferred', 'needs_work'] as const
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
   const sourceUrl = typeof body.url === 'string' ? body.url.trim() : ''
   const description = typeof body.description === 'string' ? body.description.trim() : ''
   const coverImageUrl = typeof body.cover_image_url === 'string' ? body.cover_image_url.trim() : ''
+  const artworkUrlFromBody = typeof body.artwork_url === 'string' ? body.artwork_url.trim() : ''
   const notes = typeof body.notes === 'string' ? body.notes.trim() : ''
 
   if (!primaryArtistId) return NextResponse.json({ error: 'artist_id required' }, { status: 400 })
@@ -86,9 +88,14 @@ export async function POST(request: Request) {
   // (we can refine this later — the schema requires it but our manual form makes it optional)
   const effectiveSourceUrl = sourceUrl || `manual:${Date.now()}`
 
+  // Detect Spotify track/album from the source URL so we can set the correct source value
+  // and attempt to auto-fetch release artwork.
+  const spotifyParsed = parseSpotifyUrl(effectiveSourceUrl)
+  const derivedSource = spotifyParsed ? 'spotify' : 'other'
+
   const insertPayload: Record<string, unknown> = {
     type,
-    source: 'other',
+    source: derivedSource,
     source_url: effectiveSourceUrl,
     title,
     primary_artist_id: primaryArtistId,
@@ -99,6 +106,23 @@ export async function POST(request: Request) {
     source_method: 'manual',
     status: 'pending',
     priority: 'normal',
+  }
+
+  // Pass through an explicitly provided artwork_url from the request body.
+  if (artworkUrlFromBody) {
+    insertPayload.artwork_url = artworkUrlFromBody
+  }
+
+  // Auto-fetch release artwork from Spotify when source is spotify and the caller
+  // did not already supply an artwork_url. Best-effort: any failure is logged and
+  // swallowed so submission creation is never blocked.
+  if (spotifyParsed && !artworkUrlFromBody) {
+    try {
+      const artworkUrl = await fetchSpotifyReleaseArtwork(spotifyParsed.type, spotifyParsed.id)
+      if (artworkUrl) insertPayload.artwork_url = artworkUrl
+    } catch (err) {
+      console.error('[spotify-artwork] Failed to fetch artwork for', effectiveSourceUrl, err)
+    }
   }
 
   const { data, error } = await supabase

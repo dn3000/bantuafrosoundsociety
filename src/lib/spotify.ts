@@ -60,6 +60,52 @@ export function extractSpotifyArtistId(input: string): string | null {
   return null
 }
 
+// Parse a Spotify track, album, or playlist URL/URI into {type, id}.
+// Handles optional intl-locale prefix and trailing query strings.
+// Returns null for episodes, shows, non-Spotify URLs, or malformed input.
+export function parseSpotifyUrl(input: string): { type: 'track' | 'album' | 'playlist'; id: string } | null {
+  const trimmed = input.trim()
+  // URL: https://open.spotify.com/[intl-xx/](track|album|playlist)/{22-char id}[?...]
+  const urlMatch = trimmed.match(/spotify\.com\/(?:intl-[a-z]+\/)?(track|album|playlist)\/([0-9A-Za-z]{22})/i)
+  if (urlMatch) {
+    const type = urlMatch[1].toLowerCase()
+    if (type === 'track' || type === 'album' || type === 'playlist') return { type, id: urlMatch[2] }
+  }
+  // URI: spotify:track:{id} or spotify:album:{id} or spotify:playlist:{id}
+  const uriMatch = trimmed.match(/^spotify:(track|album|playlist):([0-9A-Za-z]{22})$/i)
+  if (uriMatch) {
+    const type = uriMatch[1].toLowerCase()
+    if (type === 'track' || type === 'album' || type === 'playlist') return { type, id: uriMatch[2] }
+  }
+  return null
+}
+
+// Fetch the largest available cover image URL for a Spotify track, album, or playlist.
+// track → track.album.images; album/playlist → resource.images
+// Null widths (playlist mosaic covers) are treated as 0 for sorting.
+// Returns null if images array is missing or empty.
+export async function fetchSpotifyReleaseArtwork(type: 'track' | 'album' | 'playlist', id: string): Promise<string | null> {
+  const token = await getAccessToken()
+  const endpoint = type === 'track'
+    ? `https://api.spotify.com/v1/tracks/${id}`
+    : type === 'album'
+      ? `https://api.spotify.com/v1/albums/${id}`
+      : `https://api.spotify.com/v1/playlists/${id}?fields=images`
+  const res = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Spotify ${type} fetch failed: ${res.status} ${text.slice(0, 200)}`)
+  }
+  const data = await res.json() as {
+    album?: { images: { url: string; width: number | null }[] }
+    images?: { url: string; width: number | null }[]
+  }
+  const images = type === 'track' ? (data.album?.images ?? []) : (data.images ?? [])
+  if (!images.length) return null
+  const sorted = [...images].sort((a, b) => (b.width || 0) - (a.width || 0))
+  return sorted[0]?.url ?? null
+}
+
 export async function fetchSpotifyArtist(artistId: string): Promise<SpotifyArtist> {
   const token = await getAccessToken()
   const res = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, {
