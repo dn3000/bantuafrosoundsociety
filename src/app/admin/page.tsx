@@ -11,6 +11,10 @@ export default async function AdminDashboardPage() {
     redirect('/admin/login')
   }
 
+  // Count slots that currently have a live assignment
+  const { data: liveRows } = await supabase.from('v_editorial_live').select('slot_id')
+  const liveCount = liveRows?.length ?? 0
+
   return (
     <div className="min-h-screen bg-[var(--color-bg-base)] p-6 sm:p-10">
       <div className="max-w-5xl mx-auto">
@@ -34,7 +38,7 @@ export default async function AdminDashboardPage() {
           </form>
         </header>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Link
             href="/admin/artists"
             className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
@@ -49,6 +53,15 @@ export default async function AdminDashboardPage() {
           >
             <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Submissions</h2>
             <p className="text-sm text-[var(--color-fg-secondary)]">Review queue for tracks, releases, mixes, and events.</p>
+          </Link>
+
+          <Link
+            href="/admin/editorial"
+            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
+          >
+            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Editorial</h2>
+            <p className="text-sm text-[var(--color-fg-secondary)] mb-2">Feature content in homepage slots.</p>
+            <p className="text-xs font-semibold text-[var(--color-accent)]">{liveCount} / 7 slots live</p>
           </Link>
 
           <Link
