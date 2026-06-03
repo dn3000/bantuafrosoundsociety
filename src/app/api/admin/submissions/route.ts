@@ -88,7 +88,7 @@ export async function POST(request: Request) {
 
   const insertPayload: Record<string, unknown> = {
     type,
-    source: 'manual',
+    source: 'other',
     source_url: effectiveSourceUrl,
     title,
     primary_artist_id: primaryArtistId,
