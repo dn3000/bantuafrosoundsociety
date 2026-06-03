@@ -6,9 +6,10 @@ import Link from 'next/link'
 
 type Submission = {
   id: string
-  submission_type: 'track' | 'release' | 'mix' | 'event'
+  type: 'track' | 'release' | 'mix' | 'event'
   title: string
-  url: string | null
+  source_url: string | null
+  artwork_url: string | null
   description: string | null
   cover_image_url: string | null
   notes: string | null
@@ -123,11 +124,13 @@ export default function SubmissionDetailPage() {
     )
   }
 
-  const embedUrl = extractSpotifyEmbedUrl(submission.url)
-  const hasCover = isRenderableImage(submission.cover_image_url) || isRenderableImage(submission.artists?.image_url || null)
+  const embedUrl = extractSpotifyEmbedUrl(submission.source_url)
+  const hasCover = isRenderableImage(submission.cover_image_url) || isRenderableImage(submission.artwork_url) || isRenderableImage(submission.artists?.image_url || null)
   const coverSrc = isRenderableImage(submission.cover_image_url)
     ? submission.cover_image_url
-    : submission.artists?.image_url
+    : isRenderableImage(submission.artwork_url)
+      ? submission.artwork_url
+      : submission.artists?.image_url
 
   return (
     <div className="min-h-screen bg-[var(--color-bg-base)] p-6 sm:p-10">
@@ -169,7 +172,7 @@ export default function SubmissionDetailPage() {
             )}
             <div className="flex items-center gap-2 flex-wrap mt-3">
               <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold bg-[var(--color-bg-higher)] text-[var(--color-fg-secondary)]">
-                {submission.submission_type}
+                {submission.type}
               </span>
               <span
                 className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold ${
@@ -211,16 +214,16 @@ export default function SubmissionDetailPage() {
         )}
 
         {/* External link */}
-        {submission.url && (
+        {submission.source_url && (
           <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-4 mb-6">
             <p className="text-xs text-[var(--color-fg-tertiary)] uppercase tracking-wider mb-1">URL</p>
             <a
-              href={submission.url}
+              href={submission.source_url}
               target="_blank"
               rel="noreferrer"
               className="text-sm text-[var(--color-accent)] hover:underline break-all"
             >
-              {submission.url}
+              {submission.source_url}
             </a>
           </div>
         )}

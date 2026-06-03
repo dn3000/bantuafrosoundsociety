@@ -17,21 +17,22 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status') || ''
-  const type = searchParams.get('type') || ''
+  const typeFilter = searchParams.get('type') || ''
   const search = searchParams.get('search')?.trim() || ''
   const limit = Math.min(parseInt(searchParams.get('limit') || String(DEFAULT_LIMIT), 10), MAX_LIMIT)
   const offset = parseInt(searchParams.get('offset') || '0', 10)
 
+  // Note: joining primary_artist_id → artists relation
   let query = supabase
     .from('submissions')
-    .select('*, artists(id, name, slug, image_url)', { count: 'exact' })
+    .select('*, artists!submissions_primary_artist_id_fkey(id, name, slug, image_url)', { count: 'exact' })
     .order('created_at', { ascending: false })
 
   if (status && (ALLOWED_STATUSES as readonly string[]).includes(status)) {
     query = query.eq('status', status)
   }
-  if (type && (ALLOWED_TYPES as readonly string[]).includes(type)) {
-    query = query.eq('submission_type', type)
+  if (typeFilter && (ALLOWED_TYPES as readonly string[]).includes(typeFilter)) {
+    query = query.eq('type', typeFilter)
   }
   if (search) {
     query = query.ilike('title', `%${search}%`)
@@ -67,36 +68,43 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const artistId = typeof body.artist_id === 'string' ? body.artist_id : null
+  const primaryArtistId = typeof body.artist_id === 'string' ? body.artist_id : null
   const title = typeof body.title === 'string' ? body.title.trim() : ''
-  const submissionType = typeof body.submission_type === 'string' ? body.submission_type : 'track'
-  const url = typeof body.url === 'string' ? body.url.trim() : ''
+  const type = typeof body.submission_type === 'string' ? body.submission_type : 'track'
+  const sourceUrl = typeof body.url === 'string' ? body.url.trim() : ''
   const description = typeof body.description === 'string' ? body.description.trim() : ''
   const coverImageUrl = typeof body.cover_image_url === 'string' ? body.cover_image_url.trim() : ''
   const notes = typeof body.notes === 'string' ? body.notes.trim() : ''
 
-  if (!artistId) return NextResponse.json({ error: 'artist_id required' }, { status: 400 })
+  if (!primaryArtistId) return NextResponse.json({ error: 'artist_id required' }, { status: 400 })
   if (!title) return NextResponse.json({ error: 'title required' }, { status: 400 })
-  if (!(ALLOWED_TYPES as readonly string[]).includes(submissionType)) {
+  if (!(ALLOWED_TYPES as readonly string[]).includes(type)) {
     return NextResponse.json({ error: 'Invalid submission_type' }, { status: 400 })
+  }
+
+  // source_url is required by schema; if user didn't provide URL, store a placeholder
+  // (we can refine this later — the schema requires it but our manual form makes it optional)
+  const effectiveSourceUrl = sourceUrl || `manual:${Date.now()}`
+
+  const insertPayload: Record<string, unknown> = {
+    type,
+    source: 'manual',
+    source_url: effectiveSourceUrl,
+    title,
+    primary_artist_id: primaryArtistId,
+    submitted_by: user.id,
+    description: description || null,
+    cover_image_url: coverImageUrl || null,
+    notes: notes || null,
+    source_method: 'manual',
+    status: 'pending',
+    priority: 'normal',
   }
 
   const { data, error } = await supabase
     .from('submissions')
-    .insert({
-      artist_id: artistId,
-      submitted_by: user.id,
-      submission_type: submissionType,
-      title,
-      url: url || null,
-      description: description || null,
-      cover_image_url: coverImageUrl || null,
-      notes: notes || null,
-      source_method: 'manual',
-      status: 'pending',
-      priority: 'normal',
-    })
-    .select('*, artists(id, name, slug, image_url)')
+    .insert(insertPayload)
+    .select('*, artists!submissions_primary_artist_id_fkey(id, name, slug, image_url)')
     .single()
 
   if (error) {

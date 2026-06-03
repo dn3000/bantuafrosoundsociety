@@ -5,11 +5,12 @@ import Link from 'next/link'
 
 type Submission = {
   id: string
-  submission_type: 'track' | 'release' | 'mix' | 'event'
+  type: 'track' | 'release' | 'mix' | 'event'
   title: string
-  url: string | null
+  source_url: string | null
   description: string | null
   cover_image_url: string | null
+  artwork_url: string | null
   status: 'pending' | 'approved' | 'rejected' | 'deferred' | 'needs_work'
   priority: 'low' | 'normal' | 'high'
   source_method: string | null
@@ -218,8 +219,12 @@ const inputCls =
   'w-full bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-3 py-2 text-sm text-[var(--color-fg-primary)] placeholder:text-[var(--color-fg-tertiary)] focus:border-[var(--color-border-strong)] focus:outline-none transition-colors'
 
 function SubmissionCard({ s }: { s: Submission }) {
-  const hasCover = isRenderableImage(s.cover_image_url) || isRenderableImage(s.artists?.image_url || null)
-  const coverSrc = isRenderableImage(s.cover_image_url) ? s.cover_image_url : s.artists?.image_url
+  const hasCover = isRenderableImage(s.cover_image_url) || isRenderableImage(s.artwork_url) || isRenderableImage(s.artists?.image_url || null)
+  const coverSrc = isRenderableImage(s.cover_image_url)
+    ? s.cover_image_url
+    : isRenderableImage(s.artwork_url)
+      ? s.artwork_url
+      : s.artists?.image_url
 
   return (
     <Link
@@ -236,7 +241,7 @@ function SubmissionCard({ s }: { s: Submission }) {
       </div>
       <div className="p-3">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <TypeBadge type={s.submission_type} />
+          <TypeBadge type={s.type} />
           <StatusBadge status={s.status} />
           {s.priority === 'high' && <span className="text-[10px] uppercase font-semibold text-[var(--color-accent)]">high</span>}
         </div>
@@ -252,8 +257,12 @@ function SubmissionCard({ s }: { s: Submission }) {
 }
 
 function SubmissionListRow({ s }: { s: Submission }) {
-  const hasCover = isRenderableImage(s.cover_image_url) || isRenderableImage(s.artists?.image_url || null)
-  const coverSrc = isRenderableImage(s.cover_image_url) ? s.cover_image_url : s.artists?.image_url
+  const hasCover = isRenderableImage(s.cover_image_url) || isRenderableImage(s.artwork_url) || isRenderableImage(s.artists?.image_url || null)
+  const coverSrc = isRenderableImage(s.cover_image_url)
+    ? s.cover_image_url
+    : isRenderableImage(s.artwork_url)
+      ? s.artwork_url
+      : s.artists?.image_url
 
   return (
     <li>
@@ -273,7 +282,7 @@ function SubmissionListRow({ s }: { s: Submission }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-[var(--color-fg-primary)] truncate">{s.title}</span>
-              <TypeBadge type={s.submission_type} />
+              <TypeBadge type={s.type} />
               <StatusBadge status={s.status} />
               {s.priority === 'high' && <span className="text-[10px] uppercase font-semibold text-[var(--color-accent)]">high</span>}
             </div>

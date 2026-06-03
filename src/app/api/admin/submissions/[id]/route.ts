@@ -17,7 +17,7 @@ export async function GET(
   const { id } = await context.params
   const { data, error } = await supabase
     .from('submissions')
-    .select('*, artists(id, name, slug, image_url)')
+    .select('*, artists!submissions_primary_artist_id_fkey(id, name, slug, image_url)')
     .eq('id', id)
     .maybeSingle()
 
@@ -52,8 +52,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
     }
     updates.status = body.status
-    updates.reviewed_by = user.id
-    updates.reviewed_at = new Date().toISOString()
+    updates.approved_by = user.id
+    updates.approved_at = new Date().toISOString()
   }
 
   if (typeof body.priority === 'string') {
@@ -63,11 +63,19 @@ export async function PATCH(
     updates.priority = body.priority
   }
 
-  const stringFields = ['title', 'url', 'description', 'cover_image_url', 'notes'] as const
-  for (const field of stringFields) {
-    if (typeof body[field] === 'string') {
-      const v = (body[field] as string).trim()
-      updates[field] = v || null
+  // Map external field names to actual column names
+  const fieldMap: Record<string, string> = {
+    title: 'title',
+    url: 'source_url',
+    description: 'description',
+    cover_image_url: 'cover_image_url',
+    notes: 'notes',
+  }
+
+  for (const [extKey, colName] of Object.entries(fieldMap)) {
+    if (typeof body[extKey] === 'string') {
+      const v = (body[extKey] as string).trim()
+      updates[colName] = v || null
     }
   }
 
@@ -79,7 +87,7 @@ export async function PATCH(
     .from('submissions')
     .update(updates)
     .eq('id', id)
-    .select('*, artists(id, name, slug, image_url)')
+    .select('*, artists!submissions_primary_artist_id_fkey(id, name, slug, image_url)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
