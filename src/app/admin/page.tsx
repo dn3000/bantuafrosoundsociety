@@ -43,10 +43,13 @@ export default async function AdminDashboardPage() {
             <p className="text-sm text-[var(--color-fg-secondary)]">Manage the BASS scene graph.</p>
           </Link>
 
-          <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 opacity-50 cursor-not-allowed">
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Review Queue</h2>
-            <p className="text-sm text-[var(--color-fg-tertiary)]">Coming soon.</p>
-          </div>
+          <Link
+            href="/admin/submissions"
+            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
+          >
+            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Submissions</h2>
+            <p className="text-sm text-[var(--color-fg-secondary)]">Review queue for tracks, releases, mixes, and events.</p>
+          </Link>
 
           <Link
             href="/admin/integrations"
