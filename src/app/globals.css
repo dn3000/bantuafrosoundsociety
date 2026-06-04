@@ -51,9 +51,10 @@
   --radius-xl: 1.75rem;
   --radius-full: 9999px;
 
-  /* Typography — Geist via next/font */
-  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* Typography — Space Grotesk (headings) + Inter (body) via next/font */
+  --font-heading: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', monospace;
 
   /* Motion */
   --animate-fast: 120ms ease-out;
@@ -92,8 +93,9 @@ body {
   border-radius: var(--radius-sm);
 }
 
-/* Smooth font rendering for display sizes */
-h1, h2, h3, .display, .display-xl {
+/* Headings use Space Grotesk */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
   letter-spacing: -0.02em;
 }
 
