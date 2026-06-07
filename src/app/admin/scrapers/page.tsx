@@ -18,7 +18,7 @@ type ScanTotals = {
   skippedOld: number
 }
 type BackfillTotals = { scanned: number; filled: number; skipped: number }
-type Phase = 'idle' | 'running' | 'done' | 'stopped' | 'error'
+type Phase = 'idle' | 'running' | 'done' | 'stopped' | 'rate_limited' | 'error'
 type RunMode = 'scan' | 'backfill'
 
 const ENDPOINT = '/api/admin/scrapers/spotify-new-releases'
@@ -31,11 +31,13 @@ const ZERO_SCAN: ScanTotals = {
 }
 const ZERO_BACKFILL: BackfillTotals = { scanned: 0, filled: 0, skipped: 0 }
 
-// Cooldown when Spotify returns 429. The engine puts "retry after Ns" in the
-// rate-limit error string when Spotify sends Retry-After; honour it if present,
-// otherwise fall back to a short breather. Never shorter than the pacing delay.
-const DEFAULT_COOLDOWN_MS = 5000
-const MAX_COOLDOWN_MS = 60000
+// 429 back-off thresholds (seconds). The engine returns the structured
+// Retry-After; honour it directly — wait it out when short, but stop the run
+// cleanly when Spotify asks for a long cooldown so we never sit spinning.
+const RATE_LIMIT_MAX_WAIT_S = 120
+// Fallback wait when a 429 arrives without a Retry-After header (Spotify almost
+// always sends one). Short enough to keep moving, long enough to matter.
+const DEFAULT_RATE_LIMIT_WAIT_S = 60
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
@@ -48,19 +50,39 @@ function clampInt(v: number, min: number, max: number, fallback: number) {
   return Math.min(Math.max(n, min), max)
 }
 
-// Pull the largest sensible cooldown out of this chunk's rate-limit errors.
-function computeCooldownMs(chunkErrors: unknown, delayMs: number) {
-  let ms = DEFAULT_COOLDOWN_MS
-  if (Array.isArray(chunkErrors)) {
-    for (let i = chunkErrors.length - 1; i >= 0; i--) {
-      const m = /retry after (\d+)s/i.exec(String(chunkErrors[i]?.error ?? ''))
-      if (m) {
-        ms = Math.min(parseInt(m[1], 10) * 1000 + 500, MAX_COOLDOWN_MS)
-        break
-      }
-    }
+type RateOutcome =
+  | { kind: 'wait'; seconds: number; consecutive: number }
+  | { kind: 'stop'; retryAfterSeconds: number | null; reason: 'long' | 'repeated'; consecutive: number }
+
+// Decide how to handle a 429 given the chunk response and the run's current
+// consecutive-429 streak. Stop the whole run when either:
+//   • Retry-After > RATE_LIMIT_MAX_WAIT_S — a long cooldown; don't sit waiting.
+//   • 2 consecutive 429s with no successful call in between — the shared token is
+//     throttled app-wide, so continuing only deepens the penalty.
+// Otherwise wait the (bounded) Retry-After and continue.
+function decideRateLimit(
+  data: { retryAfter?: unknown; madeProgress?: unknown },
+  consecutivePrev: number,
+): RateOutcome {
+  // A successful call since the last 429 resets the streak to this lone 429.
+  const consecutive = data.madeProgress ? 1 : consecutivePrev + 1
+  const retryAfter =
+    typeof data.retryAfter === 'number' && Number.isFinite(data.retryAfter) ? data.retryAfter : null
+  if (consecutive >= 2) {
+    return { kind: 'stop', retryAfterSeconds: retryAfter, reason: 'repeated', consecutive }
   }
-  return Math.max(ms, delayMs)
+  if (retryAfter !== null && retryAfter > RATE_LIMIT_MAX_WAIT_S) {
+    return { kind: 'stop', retryAfterSeconds: retryAfter, reason: 'long', consecutive }
+  }
+  const seconds = Math.min(retryAfter ?? DEFAULT_RATE_LIMIT_WAIT_S, RATE_LIMIT_MAX_WAIT_S)
+  return { kind: 'wait', seconds: Math.max(1, seconds), consecutive }
+}
+
+// "after ~2m" / "after ~45s" / "later" for the rate-limit stop banner.
+function formatResumeAfter(seconds: number | null): string {
+  if (seconds == null) return 'later'
+  if (seconds < 90) return `after ~${Math.max(1, Math.round(seconds))}s`
+  return `after ~${Math.ceil(seconds / 60)}m`
 }
 
 export default function ScrapersPage() {
@@ -68,7 +90,7 @@ export default function ScrapersPage() {
   const [tier, setTier] = useState('') // '' = all tracked
   const [sinceDate, setSinceDate] = useState('2026-01-01')
   const [chunkSize, setChunkSize] = useState(25)
-  const [delayMs, setDelayMs] = useState(400)
+  const [delayMs, setDelayMs] = useState(800)
 
   // Run state
   const [phase, setPhase] = useState<Phase>('idle')
@@ -83,6 +105,10 @@ export default function ScrapersPage() {
   const [rateLimitWaiting, setRateLimitWaiting] = useState(false)
   const [rateLimitSeconds, setRateLimitSeconds] = useState(0)
   const [fatalError, setFatalError] = useState<string | null>(null)
+  // Set when a run stops because of rate limiting (distinct from a clean finish).
+  const [rateLimitStop, setRateLimitStop] = useState<
+    { retryAfterSeconds: number | null; reason: 'long' | 'repeated' } | null
+  >(null)
 
   // stopRef short-circuits the async loop; abortRef cancels the in-flight chunk.
   const stopRef = useRef(false)
@@ -99,6 +125,7 @@ export default function ScrapersPage() {
     setWarnings([])
     setRateLimitWaiting(false)
     setRateLimitSeconds(0)
+    setRateLimitStop(null)
     setScanTotals(ZERO_SCAN)
     setBackfillTotals(ZERO_BACKFILL)
     setTotalWhitelist(0)
@@ -112,10 +139,10 @@ export default function ScrapersPage() {
   }
 
   // Visible, cancellable countdown so a rate-limit pause doesn't look like a hang.
-  async function doCooldown(chunkErrors: unknown) {
-    const ms = computeCooldownMs(chunkErrors, clampInt(delayMs, 100, 5000, 400))
+  // Waits `seconds` (already bounded to RATE_LIMIT_MAX_WAIT_S by decideRateLimit).
+  async function doCooldown(seconds: number) {
     setRateLimitWaiting(true)
-    for (let s = Math.max(1, Math.ceil(ms / 1000)); s > 0; s--) {
+    for (let s = Math.max(1, Math.ceil(seconds)); s > 0; s--) {
       if (stopRef.current) break
       setRateLimitSeconds(s)
       await sleep(1000)
@@ -131,6 +158,7 @@ export default function ScrapersPage() {
     const warns: ScrapeNote[] = []
     let cursor = 0
     let whitelist = 0
+    let consecutive429 = 0
 
     try {
       while (true) {
@@ -142,7 +170,7 @@ export default function ScrapersPage() {
         const body: Record<string, unknown> = {
           limitArtists: clampInt(chunkSize, 1, 50, 25),
           sinceDate,
-          delayMs: clampInt(delayMs, 100, 5000, 400),
+          delayMs: clampInt(delayMs, 100, 5000, 800),
           cursor,
         }
         if (tier) body.tier = tier // omit entirely for "All tracked"
@@ -179,7 +207,15 @@ export default function ScrapersPage() {
         setPosition(next ?? whitelist)
 
         if (data.rateLimited) {
-          await doCooldown(data.errors)
+          const outcome = decideRateLimit(data, consecutive429)
+          consecutive429 = outcome.consecutive
+          if (outcome.kind === 'stop') {
+            // Long cooldown or repeated 429s: stop cleanly (distinct from "done").
+            setRateLimitStop({ retryAfterSeconds: outcome.retryAfterSeconds, reason: outcome.reason })
+            setPhase('rate_limited')
+            return
+          }
+          await doCooldown(outcome.seconds)
           if (stopRef.current) {
             setPhase('stopped')
             return
@@ -187,6 +223,8 @@ export default function ScrapersPage() {
           cursor = next ?? cursor // resume at the artist that 429'd (dedup makes it safe)
           continue
         }
+        // A clean chunk clears the consecutive-429 streak.
+        consecutive429 = 0
 
         if (next === null) {
           setPhase('done')
@@ -213,6 +251,7 @@ export default function ScrapersPage() {
     const totals = { ...ZERO_BACKFILL }
     const errs: ScrapeNote[] = []
     let page = 0
+    let consecutive429 = 0
 
     try {
       while (true) {
@@ -243,13 +282,21 @@ export default function ScrapersPage() {
         setBackfillPage(page)
 
         if (data.rateLimited) {
-          await doCooldown(data.errors)
+          const outcome = decideRateLimit(data, consecutive429)
+          consecutive429 = outcome.consecutive
+          if (outcome.kind === 'stop') {
+            setRateLimitStop({ retryAfterSeconds: outcome.retryAfterSeconds, reason: outcome.reason })
+            setPhase('rate_limited')
+            return
+          }
+          await doCooldown(outcome.seconds)
           if (stopRef.current) {
             setPhase('stopped')
             return
           }
           continue
         }
+        consecutive429 = 0
 
         // Backfill returns nextCursor:0 while a full page came back, null when done.
         if (data.nextCursor === null || data.nextCursor === undefined) {
@@ -282,9 +329,11 @@ export default function ScrapersPage() {
         ? 'Complete'
         : phase === 'stopped'
           ? 'Stopped'
-          : phase === 'error'
-            ? 'Failed'
-            : ''
+          : phase === 'rate_limited'
+            ? 'Rate-limited'
+            : phase === 'error'
+              ? 'Failed'
+              : ''
 
   const fieldClass =
     'w-full bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-3 py-2 text-sm text-[var(--color-fg-primary)] focus:border-[var(--color-border-strong)] transition-colors disabled:opacity-50 [color-scheme:dark]'
@@ -422,11 +471,27 @@ export default function ScrapersPage() {
           </div>
         </div>
 
-        {/* Rate-limit pause */}
+        {/* Rate-limit pause: short Retry-After — wait it out, then resume automatically */}
         {rateLimitWaiting && (
           <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-4 mb-6 border border-[var(--color-warning)]">
             <p className="text-sm text-[var(--color-warning)]">
-              ⏳ Waiting out Spotify rate limit… resuming in {rateLimitSeconds}s
+              ⏳ Waiting out Spotify rate limit (Retry-After)… resuming in {rateLimitSeconds}s
+            </p>
+          </div>
+        )}
+
+        {/* Rate-limit STOP: long cooldown or repeated 429s — distinct from a clean finish */}
+        {phase === 'rate_limited' && rateLimitStop && (
+          <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6 border border-[var(--color-warning)]">
+            <h2 className="text-sm font-semibold text-[var(--color-warning)] mb-2">
+              ⏸ Stopped — Spotify rate-limited, resume {formatResumeAfter(rateLimitStop.retryAfterSeconds)}
+            </h2>
+            <p className="text-sm text-[var(--color-fg-secondary)]">
+              {rateLimitStop.reason === 'repeated'
+                ? 'Hit 2 consecutive rate limits with no successful call in between — the shared Spotify token is throttled app-wide, so the run stopped instead of deepening the penalty. '
+                : `Spotify asked for a cooldown longer than ${RATE_LIMIT_MAX_WAIT_S}s, so the run stopped instead of sitting idle for that long. `}
+              Re-run once the cooldown passes to resume — already-published releases are skipped via
+              source-URL dedup, so resuming is safe.
             </p>
           </div>
         )}

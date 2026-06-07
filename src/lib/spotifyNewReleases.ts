@@ -7,10 +7,11 @@
 
 export const SPOTIFY_MARKET = 'ZA'
 export const DEFAULT_SINCE_DATE = '2026-01-01'
-// Pacing between Spotify calls. 400ms (~2.5 req/sec) matches the cadence the
-// existing /admin/artists/backfill uses without getting rate-limited. This app
-// is on reduced Spotify quota, so stay gentle; callers may raise this further.
-export const SCRAPE_DELAY_MS = 400
+// Pacing between Spotify calls — applied between every album-list page fetch AND
+// between artists, so the burst rate stays low. This app is on reduced Spotify
+// quota, so default gently at 800ms (~1.25 req/sec); callers may raise it
+// further when Spotify pushes back (the route accepts up to 5000ms).
+export const SCRAPE_DELAY_MS = 800
 // This Spotify app rejects limit > 10 on the artist-albums endpoint with
 // "Invalid limit" (reduced-quota apps cap the page size at 10). Hard ceiling.
 export const SPOTIFY_MAX_PAGE = 10
@@ -158,7 +159,9 @@ export function albumToSubmissionRow(
 
 export type FetchReleasesResult =
   | { ok: true; items: SpotifyAlbumItem[]; pagesFetched: number; cappedGroups: string[] }
-  | { ok: false; status: number; rateLimited: boolean; retryAfter: number | null; error: string }
+  // pagesFetched = pages successfully fetched before the error, so a caller can
+  // tell "made progress then got throttled" from "throttled on the first call".
+  | { ok: false; status: number; rateLimited: boolean; retryAfter: number | null; error: string; pagesFetched: number }
 
 // Fetch an artist's album + single releases on/after `sinceDate`, market-scoped.
 //
@@ -193,11 +196,13 @@ export async function fetchArtistReleasesSince(
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) {
         if (res.status === 429) {
+          // Honour Spotify's Retry-After (seconds). pagesFetched lets the caller
+          // distinguish a mid-pagination throttle (progress) from an immediate one.
           const ra = res.headers.get('retry-after')
-          return { ok: false, status: 429, rateLimited: true, retryAfter: ra ? parseInt(ra, 10) : null, error: 'Rate limited (429)' }
+          return { ok: false, status: 429, rateLimited: true, retryAfter: ra ? parseInt(ra, 10) : null, error: 'Rate limited (429)', pagesFetched }
         }
         const body = await res.text().catch(() => '')
-        return { ok: false, status: res.status, rateLimited: false, retryAfter: null, error: `Spotify ${res.status}: ${body.slice(0, 140)}` }
+        return { ok: false, status: res.status, rateLimited: false, retryAfter: null, error: `Spotify ${res.status}: ${body.slice(0, 140)}`, pagesFetched }
       }
       const data = (await res.json()) as { items?: SpotifyAlbumItem[]; next?: string | null }
       const pageItems = data.items ?? []

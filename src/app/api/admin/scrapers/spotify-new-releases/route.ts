@@ -114,6 +114,10 @@ export async function POST(request: Request) {
   const warnings: ScrapeError[] = []
   let rateLimited = false
   let abortedAtIndex: number | null = null
+  // Retry-After (seconds) from a 429, and whether this chunk made any successful
+  // (non-429) Spotify call before stopping — both drive the client's back-off.
+  let retryAfterSeconds: number | null = null
+  let madeProgress = false
 
   const targets = (artists ?? []).filter((a) => typeof a.spotify_artist_id === 'string' && a.spotify_artist_id)
 
@@ -130,16 +134,26 @@ export async function POST(request: Request) {
 
     if (!result.ok) {
       if (result.rateLimited) {
-        // Mirror the backfill pattern: stop immediately, surface a resumable cursor.
+        // Stop this chunk immediately and surface a resumable cursor + the
+        // Retry-After so the client backs off correctly. A 429 that fetched >=1
+        // page first still counts as progress (token not fully throttled).
+        if (result.pagesFetched > 0) madeProgress = true
         rateLimited = true
+        retryAfterSeconds = result.retryAfter
         abortedAtIndex = i
         errors.push({ artist: artist.name, error: `Rate limited (429)${result.retryAfter ? `, retry after ${result.retryAfter}s` : ''}` })
         break
       }
+      // A non-429 error is still a live (un-throttled) response → counts as
+      // progress for the client's consecutive-429 detection.
+      madeProgress = true
       errors.push({ artist: artist.name, error: result.error })
       await sleep(delayMs)
       continue
     }
+
+    // A successful fetch resets any consecutive-429 streak on the client.
+    madeProgress = true
 
     // No silent truncation: flag artists whose release list hit the page cap.
     if (result.cappedGroups.length > 0) {
@@ -224,6 +238,8 @@ export async function POST(request: Request) {
     errors,
     warnings,
     rateLimited,
+    retryAfter: retryAfterSeconds,
+    madeProgress,
     nextCursor,
   })
 }
@@ -257,6 +273,8 @@ async function handleBackfill(
   let skipped = 0
   const errors: ScrapeError[] = []
   let rateLimited = false
+  let retryAfterSeconds: number | null = null
+  let madeProgress = false
 
   for (const row of rows ?? []) {
     scanned++
@@ -271,13 +289,18 @@ async function handleBackfill(
     if (!meta.ok) {
       if (meta.rateLimited) {
         rateLimited = true
-        errors.push({ id: row.id as string, error: 'Rate limited (429) — wait and resume' })
+        retryAfterSeconds = meta.retryAfter
+        errors.push({ id: row.id as string, error: `Rate limited (429)${meta.retryAfter ? `, retry after ${meta.retryAfter}s` : ''}` })
         break
       }
+      // Non-429 error = live response → progress for consecutive-429 detection.
+      madeProgress = true
       errors.push({ id: row.id as string, error: meta.error })
       await sleep(SCRAPE_DELAY_MS)
       continue
     }
+
+    madeProgress = true
 
     // Only fill columns that are currently NULL. Never overwrite.
     const update: Record<string, string> = {}
@@ -305,6 +328,8 @@ async function handleBackfill(
     skipped,
     errors,
     rateLimited,
+    retryAfter: retryAfterSeconds,
+    madeProgress,
     // If we filled a full page there may be more rows next time.
     nextCursor: (rows?.length ?? 0) === limit ? 0 : null,
   })
