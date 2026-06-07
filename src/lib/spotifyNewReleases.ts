@@ -41,7 +41,15 @@ export type SpotifyAlbumItem = {
   artists?: SpotifyArtistRef[] // credited (main) artists — used to flag collaborators
 }
 
-// The shape we insert into `submissions` (subset — PENDING scraper rows only).
+// The shape the scraper inserts into `submissions`.
+//
+// Auto-publish: the scraper only ever scans is_tracked = true (whitelisted)
+// artists, so every scraped drop comes from a curated artist and is written
+// directly as status = 'approved' — no per-release review. An approved row is
+// immediately public (the public-read RLS exposes WHERE status = 'approved').
+// approved_by is null: provenance is carried by source_method = 'scraper', not a
+// human approver. This is scraper-only; the manual submission form still writes
+// status = 'pending'.
 export type SubmissionScrapeRow = {
   type: 'release' | 'single'
   source: 'spotify'
@@ -52,10 +60,12 @@ export type SubmissionScrapeRow = {
   artwork_url: string | null
   release_date: string
   embed_url: string
-  status: 'pending'
+  status: 'approved'
+  approved_at: string
+  approved_by: null
   source_method: 'scraper'
-  // Captures the release's credited Spotify artists so the review queue can
-  // surface collaborators not yet in our roster. We never auto-create artists.
+  // Captures the release's credited Spotify artists so reviewers can surface
+  // collaborators not yet in our roster. We never auto-create artists.
   metadata: { spotify_artists: SpotifyArtistRef[] }
 }
 
@@ -106,11 +116,14 @@ export function isBeforeDate(date: string, sinceDate: string): boolean {
   return date < sinceDate
 }
 
-// Map a Spotify album item -> a PENDING submission row, or a skip reason.
+// Map a Spotify album item -> an auto-published (status='approved') submission
+// row, or a skip reason. `approvedAt` is the scan's approval timestamp (ISO
+// string); the caller passes one value per scan pass so a batch shares it.
 export function albumToSubmissionRow(
   album: SpotifyAlbumItem,
   primaryArtistId: string,
-  sinceDate: string
+  sinceDate: string,
+  approvedAt: string
 ): { row: SubmissionScrapeRow } | { skip: 'old' | 'invalid' } {
   const releaseDate = parseReleaseDate(album.release_date, album.release_date_precision)
   if (!releaseDate) return { skip: 'invalid' }
@@ -129,7 +142,10 @@ export function albumToSubmissionRow(
       artwork_url: pickLargestImageUrl(album.images),
       release_date: releaseDate,
       embed_url: albumEmbedUrl(album.id),
-      status: 'pending',
+      // Auto-publish: tracked-artist drops go straight to approved/public.
+      status: 'approved',
+      approved_at: approvedAt,
+      approved_by: null,
       source_method: 'scraper',
       metadata: {
         spotify_artists: (album.artists ?? []).map((a) => ({ id: a.id, name: a.name })),

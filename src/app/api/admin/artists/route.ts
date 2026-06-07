@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+// Cap for "select all matching" id collection. The true total always comes from
+// the exact count (so the UI shows the real number); `capped` flags the rare
+// case where the filtered set exceeds this and not every id was returned.
+const MAX_IDS = 5000
+
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -22,8 +27,29 @@ export async function GET(request: Request) {
   const search = searchParams.get('search')?.trim() || ''
   const tier = searchParams.get('tier') || ''
   const tracked = searchParams.get('tracked') || ''
+  const idsOnly = searchParams.get('ids_only') === '1'
   const limit = Math.min(Number(searchParams.get('limit') || 50), 200)
   const offset = Math.max(Number(searchParams.get('offset') || 0), 0)
+  const tierOk = tier === 'featured' || tier === 'active' || tier === 'watch'
+
+  // "Select all matching" mode: return every matching id (up to MAX_IDS) plus the
+  // true total, so the UI can act on the whole filtered set, not just the page.
+  // Filters MUST match the list query below exactly, or the count would lie.
+  if (idsOnly) {
+    let q = supabase.from('artists').select('id', { count: 'exact' })
+    if (search) q = q.ilike('name', `%${search}%`)
+    if (tierOk) q = q.eq('tier', tier)
+    if (tracked === 'true') q = q.eq('is_tracked', true)
+    else if (tracked === 'false') q = q.eq('is_tracked', false)
+    q = q.limit(MAX_IDS)
+    const { data, error, count } = await q
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    const ids = (data ?? []).map((r) => r.id as string)
+    const total = count ?? 0
+    return NextResponse.json({ ids, total, capped: total > ids.length })
+  }
 
   let query = supabase
     .from('artists')
@@ -34,7 +60,7 @@ export async function GET(request: Request) {
   if (search) {
     query = query.ilike('name', `%${search}%`)
   }
-  if (tier === 'featured' || tier === 'active' || tier === 'watch') {
+  if (tierOk) {
     query = query.eq('tier', tier)
   }
   if (tracked === 'true') {

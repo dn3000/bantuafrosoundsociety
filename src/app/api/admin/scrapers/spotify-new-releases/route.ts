@@ -12,8 +12,10 @@ import {
   type SubmissionScrapeRow,
 } from '@/lib/spotifyNewReleases'
 
-// Spotify scraper that fills the submissions review queue with PENDING items.
-// NEVER auto-approves or publishes. Chunked + cursor so runs stay under Vercel limits.
+// Spotify scraper for tracked (whitelisted) artists. Scraped drops auto-publish:
+// rows are inserted as status='approved' and are immediately public. Chunked +
+// cursor so runs stay under Vercel limits. (The manual submission form still
+// writes status='pending' — auto-publish is scraper-only.)
 export const runtime = 'nodejs' // getAccessToken() uses Buffer
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -82,6 +84,9 @@ export async function POST(request: Request) {
   const sinceDate = isValidSinceDate(body.sinceDate) ? body.sinceDate : DEFAULT_SINCE_DATE
   // Pacing knob: raise it for the full ~940-artist run if Spotify pushes back.
   const delayMs = Math.min(Math.max(typeof body.delayMs === 'number' ? body.delayMs : SCRAPE_DELAY_MS, 100), 5000)
+  // Auto-publish: scraped drops are written as status='approved'. One approval
+  // timestamp per scan call, shared by every row this chunk inserts.
+  const approvedAt = new Date().toISOString()
 
   // Whitelist: tracked artists with a Spotify ID (+ optional tier). Stable order by id.
   let query = supabase
@@ -147,7 +152,7 @@ export async function POST(request: Request) {
     const seen = new Set<string>()
     const candidates: SubmissionScrapeRow[] = []
     for (const album of result.items) {
-      const mapped = albumToSubmissionRow(album, artist.id as string, sinceDate)
+      const mapped = albumToSubmissionRow(album, artist.id as string, sinceDate, approvedAt)
       if ('skip' in mapped) {
         if (mapped.skip === 'old') skippedOld++
         continue

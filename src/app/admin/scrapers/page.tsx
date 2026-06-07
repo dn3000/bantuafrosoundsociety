@@ -6,7 +6,8 @@ import Link from 'next/link'
 // Drives POST /api/admin/scrapers/spotify-new-releases from the browser. The
 // engine is chunked + cursor-based; this page walks the whole scope by feeding
 // nextCursor back in until it's null, so a full run never touches the console.
-// Everything queued stays PENDING — the engine enforces that, not this page.
+// Scraped drops auto-publish (status='approved') — the engine enforces that,
+// not this page. The scraper only scans tracked (whitelisted) artists.
 
 type ScrapeNote = { artist?: string; id?: string; error: string }
 type ScanTotals = {
@@ -308,9 +309,10 @@ export default function ScrapersPage() {
         <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
           <h2 className="text-sm font-semibold text-[var(--color-fg-primary)] mb-2">What this does</h2>
           <p className="text-sm text-[var(--color-fg-secondary)] mb-3">
-            Scans tracked artists for Spotify releases since the chosen date and queues anything new
-            into the Submissions review queue as <strong>PENDING</strong> items — nothing is
-            auto-approved or published. It walks the whole scope automatically, one chunk at a time.
+            Scans tracked (whitelisted) artists for Spotify releases since the chosen date. New drops
+            are <strong>published live automatically</strong> (saved as approved submissions) — no
+            per-release review, since every tracked artist is on the curated whitelist. It walks the
+            whole scope automatically, one chunk at a time.
           </p>
           <ul className="text-xs text-[var(--color-fg-tertiary)] space-y-1 list-disc list-inside">
             <li>Runs in this browser tab — keep it open until the run finishes.</li>
@@ -461,7 +463,7 @@ export default function ScrapersPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
                 <Metric label="Artists scanned" value={scanTotals.artistsScanned} />
                 <Metric label="Releases seen" value={scanTotals.releasesSeen} />
-                <Metric label="Queued" value={scanTotals.queued} accent />
+                <Metric label="Published" value={scanTotals.queued} accent />
                 <Metric label="Duplicates" value={scanTotals.skippedDuplicates} />
                 <Metric label="Old skipped" value={scanTotals.skippedOld} />
                 <Metric label="Errors" value={errors.length} error={errors.length > 0} />
@@ -494,9 +496,9 @@ export default function ScrapersPage() {
               {runMode === 'scan'
                 ? `${scanTotals.queued} new ${
                     scanTotals.queued === 1 ? 'release' : 'releases'
-                  } queued from ${scanTotals.artistsScanned} ${
+                  } published from ${scanTotals.artistsScanned} ${
                     scanTotals.artistsScanned === 1 ? 'artist' : 'artists'
-                  } scanned. They're waiting as PENDING items for review.`
+                  } scanned. They're approved and live on the site now.`
                 : `${backfillTotals.filled} ${
                     backfillTotals.filled === 1 ? 'submission' : 'submissions'
                   } filled across ${backfillTotals.scanned} scanned.`}
@@ -505,7 +507,7 @@ export default function ScrapersPage() {
               href="/admin/submissions"
               className="inline-block bg-[var(--color-accent)] text-[var(--color-fg-primary)] text-sm font-semibold rounded-[var(--radius)] px-4 py-2 hover:bg-[var(--color-accent-hover)] transition-colors"
             >
-              Review the submissions queue →
+              Open the submissions queue →
             </Link>
           </div>
         )}
