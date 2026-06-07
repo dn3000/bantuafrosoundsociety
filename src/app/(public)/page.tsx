@@ -82,12 +82,14 @@ function formatMonthYear(dateStr: string): string | null {
 function ArtworkSquare({
   submission,
   className,
+  radiusClass = 'rounded-[var(--radius-md)]',
 }: {
   submission: Submission
   className?: string
+  radiusClass?: string
 }) {
   const src = getImageSrc(submission)
-  const base = `rounded-[var(--radius-md)] object-cover ${className ?? ''}`
+  const base = `${radiusClass} object-cover ${className ?? ''}`
 
   if (src) {
     // eslint-disable-next-line @next/next/no-img-element
@@ -285,7 +287,7 @@ export default async function HomePage() {
       )}
 
       {/* ── NEW RELEASES CAROUSEL ────────────────────────────────────────── */}
-      <CardCarousel title="New Releases" items={newReleaseItems} className="mb-14" />
+      <CardCarousel title="New Releases" items={newReleaseItems} rows={2} className="mb-14" />
 
       {/* ── LATEST APPROVED ──────────────────────────────────────────────── */}
       {recent.length > 0 && (
@@ -303,8 +305,8 @@ export default async function HomePage() {
                 rel="noopener noreferrer"
                 className="group"
               >
-                <div className="aspect-square rounded-[var(--radius-md)] overflow-hidden mb-2">
-                  <ArtworkSquare submission={sub} />
+                <div className="aspect-square rounded-[8px] overflow-hidden mb-2">
+                  <ArtworkSquare submission={sub} radiusClass="rounded-[8px]" />
                 </div>
                 <p className="text-sm font-semibold text-[var(--color-fg-primary)] truncate group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
                   {sub.title}

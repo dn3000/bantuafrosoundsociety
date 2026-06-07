@@ -46,7 +46,8 @@ function getInitials(title: string): string {
 
 function CardArtwork({ item }: { item: CarouselItem }) {
   const src = getImageSrc(item)
-  const base = 'rounded-[var(--radius-md)] object-cover w-full h-full'
+  // Subtle Apple-Music-style corner radius (~8px) on the square album art.
+  const base = 'rounded-[8px] object-cover w-full h-full'
 
   if (src) {
     // eslint-disable-next-line @next/next/no-img-element
@@ -54,7 +55,7 @@ function CardArtwork({ item }: { item: CarouselItem }) {
   }
 
   return (
-    <div className="rounded-[var(--radius-md)] w-full h-full bg-[var(--color-bg-higher)] flex items-center justify-center text-[var(--color-fg-tertiary)] font-semibold text-base select-none">
+    <div className="rounded-[8px] w-full h-full bg-[var(--color-bg-higher)] flex items-center justify-center text-[var(--color-fg-tertiary)] font-semibold text-base select-none">
       {getInitials(item.title)}
     </div>
   )
@@ -66,13 +67,25 @@ export function CardCarousel({
   title,
   items,
   className,
+  rows = 1,
 }: {
   title: string
   items: CarouselItem[]
   /** Optional spacing/utility classes for the outer section (e.g. "mb-14"). */
   className?: string
+  /** Number of card rows. 1 = single scrolling row (default); 2 = two rows that
+   *  scroll horizontally together as one unit, filled column by column. */
+  rows?: 1 | 2
 }) {
   if (items.length === 0) return null
+
+  // rows=2: a 2-row grid that flows column-by-column (top card then bottom card)
+  // and scrolls horizontally as one unit. Auto-column width matches the
+  // single-row card width (w-40 / sm:w-44) so the card anatomy is unchanged.
+  const trackLayout =
+    rows === 2
+      ? 'grid grid-rows-2 grid-flow-col auto-cols-[10rem] sm:auto-cols-[11rem]'
+      : 'flex'
 
   return (
     <section className={className}>
@@ -82,9 +95,12 @@ export function CardCarousel({
         {title}
       </h2>
 
-      {/* Horizontally scrollable row: scroll-snap on mobile/desktop, scrollbar
-          hidden cross-browser via Tailwind arbitrary variants. */}
-      <div className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth py-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      {/* Horizontally scrollable track (1 or 2 rows): scroll-snap on
+          mobile/desktop, scrollbar hidden cross-browser via Tailwind arbitrary
+          variants. */}
+      <div
+        className={`${trackLayout} gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth py-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden`}
+      >
         {items.map((item) => (
           <a
             key={item.id}
@@ -96,7 +112,7 @@ export function CardCarousel({
             <p className="text-[10px] uppercase tracking-widest text-[var(--color-accent)] font-semibold mb-1.5 truncate">
               {item.label}
             </p>
-            <div className="aspect-square rounded-[var(--radius-md)] overflow-hidden mb-2">
+            <div className="aspect-square rounded-[8px] overflow-hidden mb-2">
               <CardArtwork item={item} />
             </div>
             <p className="text-sm font-semibold text-[var(--color-fg-primary)] leading-snug line-clamp-2 group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
