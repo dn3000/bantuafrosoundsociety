@@ -30,19 +30,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Admin-only. Writes are already gated by the is_admin() RLS policy on
-  // submissions (a non-admin would simply match zero rows), but we check
-  // explicitly so non-admins get a clear 403 instead of a silent { updated: 0 }.
-  // The "Users can read their own roles" policy permits this self-read.
-  const { data: roleRows } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('role', 'admin')
-    .limit(1)
-  if (!roleRows || roleRows.length === 0) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  // Authorization mirrors the single-item PATCH /api/admin/submissions/[id]
+  // exactly: authenticate the request, then let the database enforce admin via
+  // the is_admin() RLS policy on `submissions` ("Admins can manage submissions"
+  // USING/WITH CHECK is_admin()). The UPDATE below runs under this same
+  // user-session client, so a non-admin matches zero rows ({ updated: 0 }) and
+  // writes nothing — identical to how every other admin route is gated.
+  //
+  // Do NOT reintroduce a direct user_roles read here: is_admin() is SECURITY
+  // DEFINER precisely so it can see user_roles, but the `authenticated` role has
+  // no SELECT grant on that table, so a direct read errors and 403s even a real
+  // admin. That bespoke check was the cause of the 403 this endpoint had.
 
   let body: Record<string, unknown>
   try {
