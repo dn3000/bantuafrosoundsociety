@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { createClient } from '@/lib/supabase/server'
+import { CardCarousel, type CarouselItem } from '@/components/CardCarousel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -17,6 +18,11 @@ type Submission = {
   source_url: string
   created_at: string
   artists: ArtistEmbed | null
+}
+
+type ReleaseSubmission = Submission & {
+  type: string
+  release_date: string | null
 }
 
 type EditorialSlot = {
@@ -47,6 +53,28 @@ function getInitials(title: string): string {
   if (words.length === 0) return '♪'
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
   return (words[0][0] + words[words.length - 1][0]).toUpperCase()
+}
+
+// ── New Releases mapping helpers ───────────────────────────────────────────────
+
+const NEW_RELEASE_TYPE_LABELS: Record<string, string> = {
+  single: 'SINGLE',
+  release: 'ALBUM',
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+// release_date is a DATE ("YYYY-MM-DD"); parse the parts directly so the month
+// never shifts due to UTC-vs-local timezone conversion.
+function formatMonthYear(dateStr: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr)
+  if (!m) return null
+  const monthIdx = Number(m[2]) - 1
+  if (monthIdx < 0 || monthIdx > 11) return null
+  return `${MONTH_NAMES[monthIdx]} ${m[1]}`
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -124,6 +152,35 @@ export default async function HomePage() {
 
   const recent = (recentRaw ?? []) as unknown as Submission[]
 
+  // 5. Recent approved music releases for the New Releases carousel
+  const { data: newReleasesRaw } = await supabase
+    .from('submissions')
+    .select('id, title, type, release_date, artwork_url, cover_image_url, source_url, created_at, artists(name, image_url)')
+    .eq('status', 'approved')
+    .in('type', ['release', 'single'])
+    .order('release_date', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  const newReleases = (newReleasesRaw ?? []) as unknown as ReleaseSubmission[]
+
+  const newReleaseItems: CarouselItem[] = newReleases.map((sub) => {
+    const typeLabel = NEW_RELEASE_TYPE_LABELS[sub.type] ?? sub.type.toUpperCase()
+    const monthYear = sub.release_date ? formatMonthYear(sub.release_date) : null
+    const meta = monthYear ? `${typeLabel} · ${monthYear}` : typeLabel
+    return {
+      id: sub.id,
+      label: typeLabel,
+      artwork_url: sub.artwork_url,
+      cover_image_url: sub.cover_image_url,
+      artist_image_url: sub.artists?.image_url ?? null,
+      title: sub.title,
+      subtitle: sub.artists?.name ?? 'Unknown Artist',
+      meta,
+      href: sub.source_url,
+    }
+  })
+
   // Build slot_id → submission lookup
   const liveBySlotId: Record<string, Submission> = {}
   for (const item of liveItems ?? []) {
@@ -145,7 +202,11 @@ export default async function HomePage() {
       return sub ? [{ slot, sub }] : []
     })
 
-  const hasContent = heroSub || editorialSections.length > 0 || recent.length > 0
+  const hasContent =
+    heroSub ||
+    editorialSections.length > 0 ||
+    newReleaseItems.length > 0 ||
+    recent.length > 0
 
   return (
     <div className="px-4 sm:px-6 py-8 max-w-5xl mx-auto">
@@ -222,6 +283,9 @@ export default async function HomePage() {
           ))}
         </section>
       )}
+
+      {/* ── NEW RELEASES CAROUSEL ────────────────────────────────────────── */}
+      <CardCarousel title="New Releases" items={newReleaseItems} className="mb-14" />
 
       {/* ── LATEST APPROVED ──────────────────────────────────────────────── */}
       {recent.length > 0 && (
