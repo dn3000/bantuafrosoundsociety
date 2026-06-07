@@ -71,6 +71,14 @@ export default async function AdminDashboardPage() {
             <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Integrations</h2>
             <p className="text-sm text-[var(--color-fg-secondary)]">Connect Spotify and other services.</p>
           </Link>
+
+          <Link
+            href="/admin/scrapers"
+            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
+          >
+            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Scrapers</h2>
+            <p className="text-sm text-[var(--color-fg-secondary)]">Scan Spotify for new releases into the review queue.</p>
+          </Link>
         </div>
       </div>
     </div>
