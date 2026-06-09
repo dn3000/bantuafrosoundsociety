@@ -7,8 +7,8 @@
 
 export type CarouselItem = {
   id: string
-  /** Small uppercase category label shown above the artwork, e.g. "ALBUM". */
-  label: string
+  /** Small uppercase category label shown above the artwork, e.g. "ALBUM". Omit to hide. */
+  label?: string
   /** Artwork fallback chain: artwork_url → cover_image_url → artist_image_url → initials. */
   artwork_url?: string | null
   cover_image_url?: string | null
@@ -18,8 +18,8 @@ export type CarouselItem = {
   subtitle?: string | null
   /** Meta line, e.g. "ALBUM · May 2026". */
   meta?: string | null
-  /** Link target; opens in a new tab like the existing homepage items. */
-  href: string
+  /** Link target; opens in a new tab like the existing homepage items. If absent the card is rendered as a non-clickable block. */
+  href?: string
 }
 
 // ── Image helpers (same fallback chain as the homepage) ─────────────────────
@@ -44,10 +44,9 @@ function getInitials(title: string): string {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase()
 }
 
-function CardArtwork({ item }: { item: CarouselItem }) {
+function CardArtwork({ item, radiusClass }: { item: CarouselItem; radiusClass: string }) {
   const src = getImageSrc(item)
-  // Subtle Apple-Music-style corner radius (~8px) on the square album art.
-  const base = 'rounded-[8px] object-cover w-full h-full'
+  const base = `${radiusClass} object-cover w-full h-full`
 
   if (src) {
     // eslint-disable-next-line @next/next/no-img-element
@@ -55,7 +54,7 @@ function CardArtwork({ item }: { item: CarouselItem }) {
   }
 
   return (
-    <div className="rounded-[8px] w-full h-full bg-[var(--color-bg-higher)] flex items-center justify-center text-[var(--color-fg-tertiary)] font-semibold text-base select-none">
+    <div className={`${radiusClass} w-full h-full bg-[var(--color-bg-higher)] flex items-center justify-center text-[var(--color-fg-tertiary)] font-semibold text-base select-none`}>
       {getInitials(item.title)}
     </div>
   )
@@ -68,6 +67,7 @@ export function CardCarousel({
   items,
   className,
   rows = 1,
+  shape = 'square',
 }: {
   title: string
   items: CarouselItem[]
@@ -76,8 +76,14 @@ export function CardCarousel({
   /** Number of card rows. 1 = single scrolling row (default); 2 = two rows that
    *  scroll horizontally together as one unit, filled column by column. */
   rows?: 1 | 2
+  /** Artwork shape. 'square' (default) = rounded album-art tile, used by music
+   *  rows. 'circle' = full circle, used by avatar rows (e.g. Trending Artists). */
+  shape?: 'square' | 'circle'
 }) {
   if (items.length === 0) return null
+
+  // Subtle Apple-Music-style corner radius on album art; full circle for avatars.
+  const artworkRadius = shape === 'circle' ? 'rounded-full' : 'rounded-[8px]'
 
   // rows=2: a 2-row grid that flows column-by-column (top card then bottom card)
   // and scrolls horizontally as one unit. Auto-column width matches the
@@ -101,35 +107,51 @@ export function CardCarousel({
       <div
         className={`${trackLayout} gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth py-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden`}
       >
-        {items.map((item) => (
-          <a
-            key={item.id}
-            href={item.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group shrink-0 snap-start w-40 sm:w-44"
-          >
-            <p className="text-[10px] uppercase tracking-widest text-[var(--color-accent)] font-semibold mb-1.5 truncate">
-              {item.label}
-            </p>
-            <div className="aspect-square rounded-[8px] overflow-hidden mb-2">
-              <CardArtwork item={item} />
+        {items.map((item) => {
+          const inner = (
+            <>
+              {item.label && (
+                <p className="text-[10px] uppercase tracking-widest text-[var(--color-accent)] font-semibold mb-1.5 truncate">
+                  {item.label}
+                </p>
+              )}
+              <div className={`aspect-square ${artworkRadius} overflow-hidden mb-2`}>
+                <CardArtwork item={item} radiusClass={artworkRadius} />
+              </div>
+              <p className="text-sm font-semibold text-[var(--color-fg-primary)] leading-snug line-clamp-2 group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
+                {item.title}
+              </p>
+              {item.subtitle && (
+                <p className="text-xs text-[var(--color-fg-secondary)] truncate mt-0.5">
+                  {item.subtitle}
+                </p>
+              )}
+              {item.meta && (
+                <p className="text-[11px] text-[var(--color-fg-tertiary)] truncate mt-1">
+                  {item.meta}
+                </p>
+              )}
+            </>
+          )
+
+          const cardClass = 'group shrink-0 snap-start w-40 sm:w-44'
+
+          return item.href ? (
+            <a
+              key={item.id}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cardClass}
+            >
+              {inner}
+            </a>
+          ) : (
+            <div key={item.id} className={cardClass}>
+              {inner}
             </div>
-            <p className="text-sm font-semibold text-[var(--color-fg-primary)] leading-snug line-clamp-2 group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
-              {item.title}
-            </p>
-            {item.subtitle && (
-              <p className="text-xs text-[var(--color-fg-secondary)] truncate mt-0.5">
-                {item.subtitle}
-              </p>
-            )}
-            {item.meta && (
-              <p className="text-[11px] text-[var(--color-fg-tertiary)] truncate mt-1">
-                {item.meta}
-              </p>
-            )}
-          </a>
-        ))}
+          )
+        })}
       </div>
     </section>
   )

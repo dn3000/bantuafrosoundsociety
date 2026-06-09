@@ -25,6 +25,15 @@ type ReleaseSubmission = Submission & {
   release_date: string | null
 }
 
+type TrendingArtist = {
+  id: string
+  name: string
+  country: string | null
+  image_url: string | null
+  spotify_artist_id: string | null
+  tier: string | null
+}
+
 type EditorialSlot = {
   id: string
   slot_key: string
@@ -183,6 +192,69 @@ export default async function HomePage() {
     }
   })
 
+  // 6. New Albums — approved type='release' only, release_date desc nulls last
+  const { data: newAlbumsRaw } = await supabase
+    .from('submissions')
+    .select('id, title, type, release_date, artwork_url, cover_image_url, source_url, created_at, artists(name, image_url)')
+    .eq('status', 'approved')
+    .eq('type', 'release')
+    .order('release_date', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .limit(16)
+
+  const newAlbums = (newAlbumsRaw ?? []) as unknown as ReleaseSubmission[]
+
+  const newAlbumItems: CarouselItem[] = newAlbums.map((sub) => {
+    const monthYear = sub.release_date ? formatMonthYear(sub.release_date) : null
+    const meta = monthYear ? `ALBUM · ${monthYear}` : 'ALBUM'
+    return {
+      id: sub.id,
+      label: 'ALBUM',
+      artwork_url: sub.artwork_url,
+      cover_image_url: sub.cover_image_url,
+      artist_image_url: sub.artists?.image_url ?? null,
+      title: sub.title,
+      subtitle: sub.artists?.name ?? 'Unknown Artist',
+      meta,
+      href: sub.source_url,
+    }
+  })
+
+  // 7. Trending Artists — artists with a real avatar, FEATURED first then
+  // ACTIVE, then WATCH, name ASC for ties. PostgREST can't express a CASE
+  // ordering directly, so we fetch a bounded pool and sort by tier-priority
+  // in JS before slicing the top 18.
+  const { data: trendingArtistsRaw } = await supabase
+    .from('artists')
+    .select('id, name, country, image_url, spotify_artist_id, tier')
+    .not('image_url', 'is', null)
+    .limit(200)
+
+  const TIER_PRIORITY: Record<string, number> = { featured: 0, active: 1, watch: 2 }
+
+  const trendingArtists = ((trendingArtistsRaw ?? []) as TrendingArtist[])
+    .slice()
+    .sort((a, b) => {
+      const ap = TIER_PRIORITY[a.tier ?? ''] ?? 99
+      const bp = TIER_PRIORITY[b.tier ?? ''] ?? 99
+      if (ap !== bp) return ap - bp
+      return a.name.localeCompare(b.name)
+    })
+    .slice(0, 18)
+
+  const trendingArtistItems: CarouselItem[] = trendingArtists.map((artist) => {
+    const country = artist.country?.trim() || null
+    return {
+      id: artist.id,
+      artwork_url: artist.image_url,
+      title: artist.name,
+      subtitle: country,
+      href: artist.spotify_artist_id
+        ? `https://open.spotify.com/artist/${artist.spotify_artist_id}`
+        : undefined,
+    }
+  })
+
   // Build slot_id → submission lookup
   const liveBySlotId: Record<string, Submission> = {}
   for (const item of liveItems ?? []) {
@@ -207,6 +279,8 @@ export default async function HomePage() {
   const hasContent =
     heroSub ||
     editorialSections.length > 0 ||
+    trendingArtistItems.length > 0 ||
+    newAlbumItems.length > 0 ||
     newReleaseItems.length > 0 ||
     recent.length > 0
 
@@ -285,6 +359,12 @@ export default async function HomePage() {
           ))}
         </section>
       )}
+
+      {/* ── TRENDING ARTISTS CAROUSEL ────────────────────────────────────── */}
+      <CardCarousel title="Trending Artists" items={trendingArtistItems} rows={1} shape="circle" className="mb-14" />
+
+      {/* ── NEW ALBUMS CAROUSEL ──────────────────────────────────────────── */}
+      <CardCarousel title="New Albums" items={newAlbumItems} rows={1} className="mb-14" />
 
       {/* ── NEW RELEASES CAROUSEL ────────────────────────────────────────── */}
       <CardCarousel title="New Releases" items={newReleaseItems} rows={2} className="mb-14" />
