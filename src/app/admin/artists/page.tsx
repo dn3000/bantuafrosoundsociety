@@ -23,11 +23,30 @@ type Toast = { kind: 'info' | 'success' | 'error'; msg: string }
 
 // Per-row state for the Scan now button. Lives outside the Artist row so a
 // re-fetch (which replaces the artists array) doesn't drop in-flight status.
+//
+// The chip distinguishes four post-scan outcomes so the operator can tell a
+// completed-with-no-new-releases run apart from a rate-limit pause or a
+// failure — the latter two don't move last_scanned_at and need a retry.
+//   - clean         → scan completed (published>0 OR no new releases). Stamps.
+//   - rate-limited  → Spotify pushed back; don't stamp; show retry hint.
+//   - error         → API errors[] non-empty OR HTTP failure; don't stamp.
 type ScanRowStatus =
   | { kind: 'idle' }
   | { kind: 'running' }
-  | { kind: 'success'; published: number; duplicates: number }
+  | { kind: 'clean'; published: number; duplicates: number; oldSkipped: number }
+  | { kind: 'rate-limited'; retryAfter: number | null }
   | { kind: 'error'; message: string }
+
+// Format a Spotify Retry-After (seconds) as a compact "12h 4m" / "45m" string
+// for the rate-limited chip. Values under an hour collapse to ceil(min); values
+// over an hour show hours plus the ceil'd remainder minutes (or just "Nh" when
+// the minute part rounds to zero).
+function fmtRetry(s: number): string {
+  if (s < 3600) return `${Math.ceil(s / 60)}m`
+  const h = Math.floor(s / 3600)
+  const m = Math.ceil((s % 3600) / 60)
+  return m > 0 ? `${h}h ${m}m` : `${h}h`
+}
 
 // Compact relative-time formatter — minutes / hours / days / months / years.
 // Refreshed on each render; rows don't auto-tick (they re-render naturally on
@@ -248,8 +267,10 @@ export default function ArtistsListPage() {
   }
 
   // Per-artist "Scan now" — fires the single-artist scan endpoint, surfaces an
-  // inline status, and patches the local row's last_scanned_at on success so
-  // the relative-time chip updates without a refetch.
+  // inline status, and (only on a clean completion) patches the local row's
+  // last_scanned_at so the relative-time chip flips to "just now" without a
+  // refetch. Rate-limited and errored outcomes deliberately leave the stamp
+  // alone so those artists stay sorted high in least-recently-scanned.
   async function runSingleScan(artist: Artist) {
     if (!artist.spotify_artist_id) return // button is disabled in this case, but be defensive
     const current = scanStatus[artist.id]
@@ -272,19 +293,49 @@ export default function ArtistsListPage() {
       if (!res.ok) {
         throw new Error(data?.error || `Request failed (${res.status})`)
       }
+
       const published = typeof data.published === 'number' ? data.published : 0
       const duplicates = typeof data.duplicates === 'number' ? data.duplicates : 0
+      const oldSkipped = typeof data.oldSkipped === 'number' ? data.oldSkipped : 0
+      const rateLimited = data.rateLimited === true
+      const retryAfter = typeof data.retryAfter === 'number' ? data.retryAfter : null
+      const errs = Array.isArray(data.errors) ? data.errors : []
+
+      // Branch by outcome. Order matters: a rate-limit is also reported via
+      // errors[] (so the operator still sees the 429 in the logs), but the
+      // chip should call it out as a pause, not a failure.
+      if (rateLimited) {
+        setScanStatus((prev) => ({
+          ...prev,
+          [artist.id]: { kind: 'rate-limited', retryAfter },
+        }))
+        return // no stamp — scan didn't complete
+      }
+      if (errs.length > 0) {
+        setScanStatus((prev) => ({
+          ...prev,
+          [artist.id]: {
+            kind: 'error',
+            message:
+              typeof errs[0]?.error === 'string' ? errs[0].error : 'Scan failed',
+          },
+        }))
+        return // no stamp — scan didn't complete cleanly
+      }
+
+      // Clean completion (either published>0 or no new releases at all).
+      // Either way the scrape ran end-to-end and we observed current state.
       setScanStatus((prev) => ({
         ...prev,
-        [artist.id]: { kind: 'success', published, duplicates },
+        [artist.id]: { kind: 'clean', published, duplicates, oldSkipped },
       }))
-      // Patch the local row's last_scanned_at so the chip flips to "just now"
-      // without waiting for a full refetch.
       const stampedAt = new Date().toISOString()
       setArtists((prev) =>
         prev.map((a) => (a.id === artist.id ? { ...a, last_scanned_at: stampedAt } : a)),
       )
     } catch (err) {
+      // HTTP failure or network error — same visual treatment as a content
+      // error; full message kept in the tooltip.
       setScanStatus((prev) => ({
         ...prev,
         [artist.id]: {
@@ -683,7 +734,10 @@ function TriCheckbox({
 }
 
 // Inline status chip for the Scan now button. Idle shows the relative-time
-// stamp; running/success/error show the live outcome of the most recent scan.
+// stamp; running shows the spinner text; the three terminal states (clean,
+// rate-limited, error) render distinct labels and colours so the operator can
+// tell them apart at a glance — a clean "+0 published" looks nothing like
+// "rate-limited" or "error", which both look nothing like a successful run.
 function ScanRowStatusChip({
   status,
   lastScannedAt,
@@ -698,20 +752,40 @@ function ScanRowStatusChip({
       </span>
     )
   }
-  if (status.kind === 'success') {
+  if (status.kind === 'rate-limited') {
+    const suffix =
+      status.retryAfter !== null ? ` · retry in ~${fmtRetry(status.retryAfter)}` : ''
     return (
-      <span className="text-[10px] text-[var(--color-success)] font-mono">
-        +{status.published} published · {status.duplicates} dupes
+      <span className="text-[10px] text-amber-400 font-mono">
+        ⏸ Rate-limited{suffix}
       </span>
     )
   }
   if (status.kind === 'error') {
     return (
       <span
-        className="text-[10px] text-[var(--color-error)] font-mono truncate max-w-[12rem]"
+        className="text-[10px] text-red-400 font-mono"
         title={status.message}
       >
-        {status.message}
+        ⚠ Error · check logs
+      </span>
+    )
+  }
+  if (status.kind === 'clean') {
+    if (status.published > 0) {
+      return (
+        <span className="text-[10px] text-[var(--color-success)] font-mono">
+          +{status.published} published · {status.duplicates} dupes
+        </span>
+      )
+    }
+    // Clean zero — scan ran end-to-end and found nothing new. oldSkipped > 0
+    // means the artist HAS recent releases, just nothing past sinceDate.
+    return (
+      <span className="text-[10px] text-zinc-400 font-mono">
+        {status.oldSkipped > 0
+          ? `No new releases · ${status.oldSkipped} older skipped`
+          : 'No new releases'}
       </span>
     )
   }
