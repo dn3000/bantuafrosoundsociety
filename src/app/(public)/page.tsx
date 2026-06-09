@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { CardCarousel, type CarouselItem } from '@/components/CardCarousel'
 
@@ -188,7 +189,7 @@ export default async function HomePage() {
       title: sub.title,
       subtitle: sub.artists?.name ?? 'Unknown Artist',
       meta,
-      href: sub.source_url,
+      href: `/release/${sub.id}`,
     }
   })
 
@@ -216,7 +217,7 @@ export default async function HomePage() {
       title: sub.title,
       subtitle: sub.artists?.name ?? 'Unknown Artist',
       meta,
-      href: sub.source_url,
+      href: `/release/${sub.id}`,
     }
   })
 
@@ -295,10 +296,8 @@ export default async function HomePage() {
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
       {heroSub && (
         <section className="mb-14">
-          <a
-            href={heroSub.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href={`/release/${heroSub.id}`}
             className="group flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-10"
           >
             {/* Artwork */}
@@ -321,7 +320,7 @@ export default async function HomePage() {
                 Listen ↗
               </span>
             </div>
-          </a>
+          </Link>
         </section>
       )}
 
@@ -334,10 +333,8 @@ export default async function HomePage() {
                 <span className="text-[var(--color-accent)]" aria-hidden>→</span>
                 {slot.display_name}
               </h2>
-              <a
-                href={sub.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <Link
+                href={`/release/${sub.id}`}
                 className="group flex items-center gap-4 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-colors duration-[var(--animate-fast)]"
               >
                 <div className="w-14 h-14 flex-shrink-0 rounded-[var(--radius)] overflow-hidden">
@@ -352,9 +349,9 @@ export default async function HomePage() {
                   </p>
                 </div>
                 <span className="text-[var(--color-fg-tertiary)] flex-shrink-0 text-sm ml-2" aria-hidden>
-                  ↗
+                  →
                 </span>
-              </a>
+              </Link>
             </div>
           ))}
         </section>
@@ -378,11 +375,9 @@ export default async function HomePage() {
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {recent.map((sub) => (
-              <a
+              <Link
                 key={sub.id}
-                href={sub.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`/release/${sub.id}`}
                 className="group"
               >
                 <div className="aspect-square rounded-[8px] overflow-hidden mb-2">
@@ -394,7 +389,7 @@ export default async function HomePage() {
                 <p className="text-xs text-[var(--color-fg-secondary)] truncate mt-0.5">
                   {sub.artists?.name ?? 'Unknown Artist'}
                 </p>
-              </a>
+              </Link>
             ))}
           </div>
         </section>

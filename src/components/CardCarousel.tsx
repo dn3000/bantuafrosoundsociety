@@ -5,6 +5,8 @@
 // editorial picks, etc.) can reuse it. Renders nothing when `items` is empty,
 // matching the homepage's empty editorial slots.
 
+import Link from 'next/link'
+
 export type CarouselItem = {
   id: string
   /** Small uppercase category label shown above the artwork, e.g. "ALBUM". Omit to hide. */
@@ -136,7 +138,25 @@ export function CardCarousel({
 
           const cardClass = 'group shrink-0 snap-start w-40 sm:w-44'
 
-          return item.href ? (
+          if (!item.href) {
+            return (
+              <div key={item.id} className={cardClass}>
+                {inner}
+              </div>
+            )
+          }
+
+          // Internal hrefs (start with "/") use client-side routing; external
+          // links open in a new tab like Spotify artist pages.
+          if (item.href.startsWith('/')) {
+            return (
+              <Link key={item.id} href={item.href} className={cardClass}>
+                {inner}
+              </Link>
+            )
+          }
+
+          return (
             <a
               key={item.id}
               href={item.href}
@@ -146,10 +166,6 @@ export function CardCarousel({
             >
               {inner}
             </a>
-          ) : (
-            <div key={item.id} className={cardClass}>
-              {inner}
-            </div>
           )
         })}
       </div>
