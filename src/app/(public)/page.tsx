@@ -26,6 +26,15 @@ type ReleaseSubmission = Submission & {
   release_date: string | null
 }
 
+type CuratedPlaylist = {
+  id: string
+  spotify_playlist_id: string
+  name: string | null
+  curator_name: string | null
+  cover_image_url: string | null
+  image_url: string | null
+}
+
 type TrendingArtist = {
   id: string
   name: string
@@ -221,7 +230,28 @@ export default async function HomePage() {
     }
   })
 
-  // 7. Trending Artists — artists with a real avatar, FEATURED first then
+  // 7. Curated playlists — published, ordered by display_order asc then updated_at desc
+  const { data: playlistsRaw } = await supabase
+    .from('tracked_playlists')
+    .select('id, spotify_playlist_id, name, curator_name, cover_image_url, image_url')
+    .eq('is_published', true)
+    .order('display_order', { ascending: true })
+    .order('updated_at', { ascending: false })
+    .limit(12)
+
+  const playlists = (playlistsRaw ?? []) as CuratedPlaylist[]
+
+  const playlistItems: CarouselItem[] = playlists.map((pl) => ({
+    id: pl.id,
+    label: 'PLAYLIST',
+    cover_image_url: pl.cover_image_url,
+    artist_image_url: pl.image_url,
+    title: pl.name ?? 'Untitled Playlist',
+    subtitle: pl.curator_name,
+    href: `/playlist/${pl.id}`,
+  }))
+
+  // 8. Trending Artists — artists with a real avatar, FEATURED first then
   // ACTIVE, then WATCH, name ASC for ties. PostgREST can't express a CASE
   // ordering directly, so we fetch a bounded pool and sort by tier-priority
   // in JS before slicing the top 18.
@@ -283,6 +313,7 @@ export default async function HomePage() {
     trendingArtistItems.length > 0 ||
     newAlbumItems.length > 0 ||
     newReleaseItems.length > 0 ||
+    playlistItems.length > 0 ||
     recent.length > 0
 
   return (
@@ -362,6 +393,9 @@ export default async function HomePage() {
 
       {/* ── NEW ALBUMS CAROUSEL ──────────────────────────────────────────── */}
       <CardCarousel title="New Albums" items={newAlbumItems} rows={1} className="mb-14" />
+
+      {/* ── PLAYLISTS CAROUSEL ──────────────────────────────────────────── */}
+      <CardCarousel title="Playlists" items={playlistItems} rows={1} shape="square" className="mb-14" />
 
       {/* ── NEW RELEASES CAROUSEL ────────────────────────────────────────── */}
       <CardCarousel title="New Releases" items={newReleaseItems} rows={2} className="mb-14" />
