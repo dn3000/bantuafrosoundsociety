@@ -173,21 +173,25 @@ export default function CuratedPlaylistsPage() {
     load()
   }, [load])
 
-  async function fetchMeta() {
+  async function doFetch(value: string) {
+    const trimmed = value.trim()
+    if (!trimmed || fetchBusy) return
     setFetchBusy(true)
     setFetchNote(null)
     try {
       const res = await fetch('/api/admin/playlists/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: spotifyInput }),
+        body: JSON.stringify({ input: trimmed }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
+      // Always capture the resolved ID when the server returns one —
+      // even on soft failure (valid ID, no metadata).
+      if (data.spotifyPlaylistId) setResolvedId(data.spotifyPlaylistId)
+      if (!res.ok || data.error) {
         setFetchNote('error')
         return
       }
-      setResolvedId(data.playlistId || '')
       setAddFields((f) => ({
         ...f,
         name: data.title || '',
@@ -208,7 +212,11 @@ export default function CuratedPlaylistsPage() {
     setNotice(null)
     const id = resolvedId || parseIdClient(spotifyInput)
     if (!id) {
-      setError('Could not parse a Spotify playlist id. Click "Fetch from Spotify" or paste a bare 22-character id.')
+      setError('Could not parse a Spotify playlist id. Paste the full URL or a bare 22-character id.')
+      return
+    }
+    if (!addFields.name.trim()) {
+      setError('Title is required — click "Fetch from Spotify" to prefill, or type a title manually.')
       return
     }
     setAdding(true)
@@ -254,6 +262,10 @@ export default function CuratedPlaylistsPage() {
   }
 
   async function saveEdit(id: string) {
+    if (!editFields.name.trim()) {
+      setError('Title is required.')
+      return
+    }
     setSavingId(id)
     setError(null)
     try {
@@ -357,13 +369,25 @@ export default function CuratedPlaylistsPage() {
                 setResolvedId('')
                 setFetchNote(null)
               }}
+              onBlur={() => {
+                if (spotifyInput.trim() && !resolvedId && !fetchBusy) doFetch(spotifyInput)
+              }}
+              onPaste={(e) => {
+                // Capture the element ref before the event object is nulled,
+                // then read el.value in the next tick once the paste is applied.
+                const el = e.currentTarget
+                setTimeout(() => {
+                  const val = el.value
+                  if (val.trim()) doFetch(val)
+                }, 0)
+              }}
               disabled={adding || fetchBusy}
               placeholder="https://open.spotify.com/playlist/… or bare ID"
               className={FC}
             />
             <button
               type="button"
-              onClick={fetchMeta}
+              onClick={() => doFetch(spotifyInput)}
               disabled={!spotifyInput.trim() || fetchBusy || adding}
               className="bg-[var(--color-bg-higher)] text-[var(--color-fg-secondary)] font-semibold rounded-[var(--radius)] px-4 py-2 text-sm hover:text-[var(--color-fg-primary)] transition-colors disabled:opacity-50 whitespace-nowrap"
             >
