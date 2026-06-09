@@ -18,10 +18,22 @@ type ScanTotals = {
   skippedOld: number
 }
 type BackfillTotals = { scanned: number; filled: number; skipped: number }
+// Playlist scan totals (the additive playlist scraper). Album-level dedup means
+// `published` counts unique albums; `duplicates` counts repeat tracks of an
+// already-seen album plus albums already in submissions.
+type PlaylistTotals = {
+  playlistsScanned: number
+  processed: number
+  published: number
+  duplicates: number
+  oldSkipped: number
+  pagesFetched: number
+}
 type Phase = 'idle' | 'running' | 'done' | 'stopped' | 'rate_limited' | 'error'
-type RunMode = 'scan' | 'backfill'
+type RunMode = 'scan' | 'backfill' | 'playlist'
 
 const ENDPOINT = '/api/admin/scrapers/spotify-new-releases'
+const PLAYLIST_ENDPOINT = '/api/admin/scrapers/spotify-playlists'
 const ZERO_SCAN: ScanTotals = {
   artistsScanned: 0,
   releasesSeen: 0,
@@ -30,6 +42,14 @@ const ZERO_SCAN: ScanTotals = {
   skippedOld: 0,
 }
 const ZERO_BACKFILL: BackfillTotals = { scanned: 0, filled: 0, skipped: 0 }
+const ZERO_PLAYLIST: PlaylistTotals = {
+  playlistsScanned: 0,
+  processed: 0,
+  published: 0,
+  duplicates: 0,
+  oldSkipped: 0,
+  pagesFetched: 0,
+}
 
 // 429 back-off thresholds (seconds). The engine returns the structured
 // Retry-After; honour it directly — wait it out when short, but stop the run
@@ -92,14 +112,21 @@ export default function ScrapersPage() {
   const [chunkSize, setChunkSize] = useState(25)
   const [delayMs, setDelayMs] = useState(800)
 
+  // Playlist-scan controls (separate from the per-artist scan above)
+  const [pSinceDate, setPSinceDate] = useState('2026-01-01')
+  const [pChunkSize, setPChunkSize] = useState(5)
+  const [pDelayMs, setPDelayMs] = useState(800)
+
   // Run state
   const [phase, setPhase] = useState<Phase>('idle')
   const [runMode, setRunMode] = useState<RunMode | null>(null)
   const [scanTotals, setScanTotals] = useState<ScanTotals>(ZERO_SCAN)
   const [backfillTotals, setBackfillTotals] = useState<BackfillTotals>(ZERO_BACKFILL)
+  const [playlistTotals, setPlaylistTotals] = useState<PlaylistTotals>(ZERO_PLAYLIST)
   const [errors, setErrors] = useState<ScrapeNote[]>([])
   const [warnings, setWarnings] = useState<ScrapeNote[]>([])
   const [totalWhitelist, setTotalWhitelist] = useState(0)
+  const [totalPlaylists, setTotalPlaylists] = useState(0)
   const [position, setPosition] = useState(0)
   const [backfillPage, setBackfillPage] = useState(0)
   const [rateLimitWaiting, setRateLimitWaiting] = useState(false)
@@ -128,7 +155,9 @@ export default function ScrapersPage() {
     setRateLimitStop(null)
     setScanTotals(ZERO_SCAN)
     setBackfillTotals(ZERO_BACKFILL)
+    setPlaylistTotals(ZERO_PLAYLIST)
     setTotalWhitelist(0)
+    setTotalPlaylists(0)
     setPosition(0)
     setBackfillPage(0)
   }
@@ -318,13 +347,113 @@ export default function ScrapersPage() {
     }
   }
 
-  const pct =
-    totalWhitelist > 0 ? Math.min(100, Math.round((position / totalWhitelist) * 100)) : 0
+  // Playlist scan — mirrors runScan but drives the additive playlist endpoint.
+  // Same cursor loop + decideRateLimit back-off; the response is the same shape.
+  async function runPlaylistScan() {
+    resetForRun('playlist')
+    const totals = { ...ZERO_PLAYLIST }
+    const errs: ScrapeNote[] = []
+    let cursor = 0
+    let total = 0
+    let consecutive429 = 0
+
+    try {
+      while (true) {
+        if (stopRef.current) {
+          setPhase('stopped')
+          return
+        }
+
+        const controller = new AbortController()
+        abortRef.current = controller
+        const res = await fetch(PLAYLIST_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sinceDate: pSinceDate,
+            delayMs: clampInt(pDelayMs, 100, 5000, 800),
+            chunkSize: clampInt(pChunkSize, 1, 25, 5),
+            cursor,
+          }),
+          signal: controller.signal,
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
+
+        totals.playlistsScanned += num(data.playlistsScanned)
+        totals.processed += num(data.processed)
+        totals.published += num(data.published)
+        totals.duplicates += num(data.duplicates)
+        totals.oldSkipped += num(data.oldSkipped)
+        totals.pagesFetched += num(data.pagesFetched)
+        // Playlist errors carry { playlist, error }; surface the name in the list.
+        if (Array.isArray(data.errors)) {
+          errs.push(
+            ...data.errors.map((e: { playlist?: string; error?: string }) => ({
+              artist: e.playlist,
+              error: e.error ?? 'Unknown error',
+            })),
+          )
+        }
+        if (typeof data.totalPlaylists === 'number') total = data.totalPlaylists
+
+        setPlaylistTotals({ ...totals })
+        setErrors([...errs])
+        setTotalPlaylists(total)
+
+        const next = typeof data.nextCursor === 'number' ? data.nextCursor : null
+        setPosition(next ?? total)
+
+        if (data.rateLimited) {
+          const outcome = decideRateLimit(data, consecutive429)
+          consecutive429 = outcome.consecutive
+          if (outcome.kind === 'stop') {
+            setRateLimitStop({ retryAfterSeconds: outcome.retryAfterSeconds, reason: outcome.reason })
+            setPhase('rate_limited')
+            return
+          }
+          await doCooldown(outcome.seconds)
+          if (stopRef.current) {
+            setPhase('stopped')
+            return
+          }
+          cursor = next ?? cursor // resume at the playlist that 429'd (dedup makes it safe)
+          continue
+        }
+        consecutive429 = 0
+
+        if (next === null) {
+          setPhase('done')
+          return
+        }
+        cursor = next
+        await sleep(200) // small breather between chunks
+      }
+    } catch (err) {
+      if (isAbort(err) || stopRef.current) setPhase('stopped')
+      else {
+        setFatalError(errMsg(err))
+        setPhase('error')
+      }
+    } finally {
+      setRateLimitWaiting(false)
+      setRateLimitSeconds(0)
+      abortRef.current = null
+    }
+  }
+
+  // Progress denominator + percentage: artist scan counts artists, playlist scan
+  // counts playlists; backfill has no fixed total.
+  const denom = runMode === 'playlist' ? totalPlaylists : totalWhitelist
+  const pct = denom > 0 ? Math.min(100, Math.round((position / denom) * 100)) : 0
+  const showProgressCounter = (runMode === 'scan' || runMode === 'playlist') && denom > 0
   const statusLabel =
     phase === 'running'
       ? runMode === 'scan'
         ? 'Scanning…'
-        : 'Backfilling…'
+        : runMode === 'playlist'
+          ? 'Scanning playlists…'
+          : 'Backfilling…'
       : phase === 'done'
         ? 'Complete'
         : phase === 'stopped'
@@ -471,6 +600,91 @@ export default function ScrapersPage() {
           </div>
         </div>
 
+        {/* Spotify playlists scan — additive sibling scraper, separate content source */}
+        <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-[var(--color-fg-primary)]">Spotify playlists scan</h2>
+            <Link
+              href="/admin/playlists"
+              className="text-xs text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] transition-colors"
+            >
+              Manage playlists →
+            </Link>
+          </div>
+          <p className="text-sm text-[var(--color-fg-secondary)] mb-4">
+            Scans every <strong>active tracked playlist</strong> for releases since the chosen date,
+            taking each track&apos;s album as the unit. New drops publish live automatically — the
+            curated playlist is the trust gate. One playlist replaces ~50 per-artist scans.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+            <div>
+              <label htmlFor="pSinceDate" className={labelClass}>
+                Since date
+              </label>
+              <input
+                id="pSinceDate"
+                type="date"
+                value={pSinceDate}
+                onChange={(e) => setPSinceDate(e.target.value)}
+                disabled={running}
+                className={fieldClass}
+              />
+            </div>
+            <div>
+              <label htmlFor="pChunkSize" className={labelClass}>
+                Chunk size (playlists / call)
+              </label>
+              <input
+                id="pChunkSize"
+                type="number"
+                min={1}
+                max={25}
+                value={pChunkSize}
+                onChange={(e) => setPChunkSize(Number(e.target.value))}
+                disabled={running}
+                className={fieldClass}
+              />
+              <p className="text-xs text-[var(--color-fg-tertiary)] mt-1">1–25.</p>
+            </div>
+            <div>
+              <label htmlFor="pDelayMs" className={labelClass}>
+                Delay between pages (ms)
+              </label>
+              <input
+                id="pDelayMs"
+                type="number"
+                min={100}
+                max={5000}
+                step={100}
+                value={pDelayMs}
+                onChange={(e) => setPDelayMs(Number(e.target.value))}
+                disabled={running}
+                className={fieldClass}
+              />
+              <p className="text-xs text-[var(--color-fg-tertiary)] mt-1">100–5000.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {running ? (
+              <button
+                type="button"
+                onClick={stop}
+                className="border border-[var(--color-border-strong)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-bg-higher)] transition-colors"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={runPlaylistScan}
+                className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-accent-hover)] transition-colors"
+              >
+                Run playlists scan
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Rate-limit pause: short Retry-After — wait it out, then resume automatically */}
         {rateLimitWaiting && (
           <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-4 mb-6 border border-[var(--color-warning)]">
@@ -501,11 +715,11 @@ export default function ScrapersPage() {
           <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-[var(--color-fg-primary)]">
-                {runMode === 'scan' ? 'Scan' : 'Backfill'} — {statusLabel}
+                {runMode === 'scan' ? 'Scan' : runMode === 'playlist' ? 'Playlists scan' : 'Backfill'} — {statusLabel}
               </h2>
-              {runMode === 'scan' && totalWhitelist > 0 && (
+              {showProgressCounter && (
                 <span className="text-xs text-[var(--color-fg-tertiary)] font-mono">
-                  {position} / {totalWhitelist} ({pct}%)
+                  {position} / {denom} ({pct}%)
                 </span>
               )}
               {runMode === 'backfill' && backfillPage > 0 && (
@@ -515,7 +729,7 @@ export default function ScrapersPage() {
               )}
             </div>
 
-            {runMode === 'scan' && totalWhitelist > 0 && (
+            {showProgressCounter && (
               <div className="w-full h-2 bg-[var(--color-bg-base)] rounded-full overflow-hidden mb-4">
                 <div
                   className="h-full bg-[var(--color-accent)] transition-all duration-300"
@@ -531,6 +745,15 @@ export default function ScrapersPage() {
                 <Metric label="Published" value={scanTotals.queued} accent />
                 <Metric label="Duplicates" value={scanTotals.skippedDuplicates} />
                 <Metric label="Old skipped" value={scanTotals.skippedOld} />
+                <Metric label="Errors" value={errors.length} error={errors.length > 0} />
+              </div>
+            ) : runMode === 'playlist' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+                <Metric label="Playlists scanned" value={playlistTotals.playlistsScanned} />
+                <Metric label="Tracks processed" value={playlistTotals.processed} />
+                <Metric label="Published" value={playlistTotals.published} accent />
+                <Metric label="Duplicates" value={playlistTotals.duplicates} />
+                <Metric label="Old skipped" value={playlistTotals.oldSkipped} />
                 <Metric label="Errors" value={errors.length} error={errors.length > 0} />
               </div>
             ) : (
@@ -555,7 +778,7 @@ export default function ScrapersPage() {
         {phase === 'done' && (
           <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6 border border-[var(--color-border-default)]">
             <h2 className="text-sm font-semibold text-[var(--color-success)] mb-2">
-              ✓ {runMode === 'scan' ? 'Scan complete' : 'Backfill complete'}
+              ✓ {runMode === 'scan' ? 'Scan complete' : runMode === 'playlist' ? 'Playlists scan complete' : 'Backfill complete'}
             </h2>
             <p className="text-sm text-[var(--color-fg-secondary)] mb-4">
               {runMode === 'scan'
@@ -564,9 +787,17 @@ export default function ScrapersPage() {
                   } published from ${scanTotals.artistsScanned} ${
                     scanTotals.artistsScanned === 1 ? 'artist' : 'artists'
                   } scanned. They're approved and live on the site now.`
-                : `${backfillTotals.filled} ${
-                    backfillTotals.filled === 1 ? 'submission' : 'submissions'
-                  } filled across ${backfillTotals.scanned} scanned.`}
+                : runMode === 'playlist'
+                  ? `${playlistTotals.published} new ${
+                      playlistTotals.published === 1 ? 'release' : 'releases'
+                    } published from ${playlistTotals.playlistsScanned} ${
+                      playlistTotals.playlistsScanned === 1 ? 'playlist' : 'playlists'
+                    } scanned (${playlistTotals.duplicates} duplicate-album ${
+                      playlistTotals.duplicates === 1 ? 'skip' : 'skips'
+                    }, ${playlistTotals.oldSkipped} too old). They're approved and live on the site now.`
+                  : `${backfillTotals.filled} ${
+                      backfillTotals.filled === 1 ? 'submission' : 'submissions'
+                    } filled across ${backfillTotals.scanned} scanned.`}
             </p>
             <Link
               href="/admin/submissions"
