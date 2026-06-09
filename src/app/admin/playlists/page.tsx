@@ -38,6 +38,91 @@ const EMPTY: FieldSet = {
   displayOrder: 0,
 }
 
+const FC =
+  'w-full bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-3 py-2 text-sm text-[var(--color-fg-primary)] focus:border-[var(--color-border-strong)] transition-colors disabled:opacity-50'
+const LC = 'block text-xs font-semibold text-[var(--color-fg-secondary)] mb-1'
+
+function Fields({
+  fields,
+  onChange,
+  disabled,
+}: {
+  fields: FieldSet
+  onChange: (f: FieldSet) => void
+  disabled: boolean
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+      <div>
+        <label className={LC}>Title</label>
+        <input
+          type="text"
+          value={fields.name}
+          onChange={(e) => onChange({ ...fields, name: e.target.value })}
+          disabled={disabled}
+          placeholder="Playlist title"
+          className={FC}
+        />
+      </div>
+      <div>
+        <label className={LC}>Curator</label>
+        <input
+          type="text"
+          value={fields.curatorName}
+          onChange={(e) => onChange({ ...fields, curatorName: e.target.value })}
+          disabled={disabled}
+          placeholder="Curator name"
+          className={FC}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <label className={LC}>Description</label>
+        <input
+          type="text"
+          value={fields.description}
+          onChange={(e) => onChange({ ...fields, description: e.target.value })}
+          disabled={disabled}
+          placeholder="Short description (optional)"
+          className={FC}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <label className={LC}>Cover image URL</label>
+        <input
+          type="text"
+          value={fields.coverImageUrl}
+          onChange={(e) => onChange({ ...fields, coverImageUrl: e.target.value })}
+          disabled={disabled}
+          placeholder="https://i.scdn.co/…"
+          className={FC}
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={fields.isPublished}
+            onChange={(e) => onChange({ ...fields, isPublished: e.target.checked })}
+            disabled={disabled}
+            className="rounded border-[var(--color-border-default)] accent-[var(--color-accent)]"
+          />
+          <span className="text-sm text-[var(--color-fg-primary)]">Published</span>
+        </label>
+      </div>
+      <div>
+        <label className={LC}>Display order</label>
+        <input
+          type="number"
+          value={fields.displayOrder}
+          onChange={(e) => onChange({ ...fields, displayOrder: Number(e.target.value) })}
+          disabled={disabled}
+          className={FC}
+        />
+      </div>
+    </div>
+  )
+}
+
 function parseIdClient(input: string): string | null {
   const t = input.trim()
   if (/^[0-9A-Za-z]{22}$/.test(t)) return t
@@ -238,92 +323,6 @@ export default function CuratedPlaylistsPage() {
     }
   }
 
-  const fc =
-    'w-full bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-3 py-2 text-sm text-[var(--color-fg-primary)] focus:border-[var(--color-border-strong)] transition-colors disabled:opacity-50'
-  const lc = 'block text-xs font-semibold text-[var(--color-fg-secondary)] mb-1'
-
-  function Fields({
-    fields,
-    onChange,
-    disabled,
-  }: {
-    fields: FieldSet
-    onChange: (f: FieldSet) => void
-    disabled: boolean
-  }) {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-        <div>
-          <label className={lc}>Title</label>
-          <input
-            type="text"
-            value={fields.name}
-            onChange={(e) => onChange({ ...fields, name: e.target.value })}
-            disabled={disabled}
-            placeholder="Playlist title"
-            className={fc}
-          />
-        </div>
-        <div>
-          <label className={lc}>Curator</label>
-          <input
-            type="text"
-            value={fields.curatorName}
-            onChange={(e) => onChange({ ...fields, curatorName: e.target.value })}
-            disabled={disabled}
-            placeholder="Curator name"
-            className={fc}
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={lc}>Description</label>
-          <input
-            type="text"
-            value={fields.description}
-            onChange={(e) => onChange({ ...fields, description: e.target.value })}
-            disabled={disabled}
-            placeholder="Short description (optional)"
-            className={fc}
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={lc}>Cover image URL</label>
-          <input
-            type="text"
-            value={fields.coverImageUrl}
-            onChange={(e) => onChange({ ...fields, coverImageUrl: e.target.value })}
-            disabled={disabled}
-            placeholder="https://i.scdn.co/…"
-            className={fc}
-          />
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={fields.isPublished}
-              onChange={(e) => onChange({ ...fields, isPublished: e.target.checked })}
-              disabled={disabled}
-              className="rounded border-[var(--color-border-default)] accent-[var(--color-accent)]"
-            />
-            <span className="text-sm text-[var(--color-fg-primary)]">Published</span>
-          </label>
-        </div>
-        <div>
-          <label className={lc}>Display order</label>
-          <input
-            type="number"
-            value={fields.displayOrder}
-            onChange={(e) => onChange({ ...fields, displayOrder: Number(e.target.value) })}
-            disabled={disabled}
-            className={fc}
-            style={{ width: '100%' }}
-          />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-[var(--color-bg-base)] p-6 sm:p-10">
       <div className="max-w-3xl mx-auto">
@@ -360,7 +359,7 @@ export default function CuratedPlaylistsPage() {
               }}
               disabled={adding || fetchBusy}
               placeholder="https://open.spotify.com/playlist/… or bare ID"
-              className={fc}
+              className={FC}
             />
             <button
               type="button"
