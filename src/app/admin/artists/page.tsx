@@ -15,9 +15,40 @@ type Artist = {
   subgenres: string[]
   image_url: string | null
   updated_at: string
+  last_scanned_at: string | null
+  spotify_artist_id: string | null
 }
 
 type Toast = { kind: 'info' | 'success' | 'error'; msg: string }
+
+// Per-row state for the Scan now button. Lives outside the Artist row so a
+// re-fetch (which replaces the artists array) doesn't drop in-flight status.
+type ScanRowStatus =
+  | { kind: 'idle' }
+  | { kind: 'running' }
+  | { kind: 'success'; published: number; duplicates: number }
+  | { kind: 'error'; message: string }
+
+// Compact relative-time formatter — minutes / hours / days / months / years.
+// Refreshed on each render; rows don't auto-tick (they re-render naturally on
+// fetch or scan-success, which is the only time the value would change).
+function formatRelativeTime(iso: string | null): string {
+  if (!iso) return 'never'
+  const then = new Date(iso).getTime()
+  if (!Number.isFinite(then)) return 'never'
+  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000))
+  if (diffSec < 60) return 'just now'
+  const mins = Math.floor(diffSec / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 30) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+  const years = Math.floor(months / 12)
+  return `${years}y ago`
+}
 
 const PAGE_SIZE = 50
 // Each bulk request carries at most this many ids; larger selections are chunked
@@ -87,6 +118,10 @@ export default function ArtistsListPage() {
   const [search, setSearch] = useState('')
   const [tierFilter, setTierFilter] = useState('')
   const [trackedFilter, setTrackedFilter] = useState('')
+  // Sort mode — see /api/admin/artists. 'updated_desc' keeps the existing
+  // default; 'scanned_asc_nulls_first' surfaces never-/least-recently-scanned
+  // artists so the next bulk run can prioritise them.
+  const [sort, setSort] = useState<'updated_desc' | 'scanned_asc_nulls_first'>('updated_desc')
   const [page, setPage] = useState(0)
 
   // Selection (persists across pages so "select all matching" can span the queue)
@@ -97,6 +132,11 @@ export default function ArtistsListPage() {
   // Batch action
   const [actionRunning, setActionRunning] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
+
+  // Per-row Scan now state, keyed by artist id. Survives the artists[] swap
+  // that follows a successful scan (we don't reset on fetch — only on a fresh
+  // filter context).
+  const [scanStatus, setScanStatus] = useState<Record<string, ScanRowStatus>>({})
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const showingFrom = total === 0 ? 0 : page * PAGE_SIZE + 1
@@ -110,16 +150,19 @@ export default function ArtistsListPage() {
 
   // Shared filter query string (everything except pagination) — used by both the
   // list fetch and the ids_only "select all matching" fetch so they stay in sync.
+  // sort is included so the list reflects the chosen order; ids_only ignores
+  // sort server-side (the matching id set is the same), which is fine.
   const buildParams = useCallback(
     (extra: Record<string, string> = {}) => {
       const p = new URLSearchParams()
       if (search) p.set('search', search)
       if (tierFilter) p.set('tier', tierFilter)
       if (trackedFilter) p.set('tracked', trackedFilter)
+      if (sort !== 'updated_desc') p.set('sort', sort)
       for (const [k, v] of Object.entries(extra)) p.set(k, v)
       return p.toString()
     },
-    [search, tierFilter, trackedFilter],
+    [search, tierFilter, trackedFilter, sort],
   )
 
   const fetchArtists = useCallback(async () => {
@@ -137,12 +180,15 @@ export default function ArtistsListPage() {
     }
   }, [buildParams, page])
 
-  // A fresh filter is a fresh selection context: reset to page 1 and drop selection.
+  // A fresh filter is a fresh selection context: reset to page 1, drop selection,
+  // and clear any sticky per-row scan statuses (their target rows may be paging
+  // out anyway).
   useEffect(() => {
     setPage(0)
     setSelectedIds(new Set())
     setAllMatchingCapped(false)
-  }, [search, tierFilter, trackedFilter])
+    setScanStatus({})
+  }, [search, tierFilter, trackedFilter, sort])
 
   useEffect(() => {
     const t = setTimeout(fetchArtists, 250)
@@ -198,6 +244,54 @@ export default function ArtistsListPage() {
       }
     } finally {
       setSelecting(false)
+    }
+  }
+
+  // Per-artist "Scan now" — fires the single-artist scan endpoint, surfaces an
+  // inline status, and patches the local row's last_scanned_at on success so
+  // the relative-time chip updates without a refetch.
+  async function runSingleScan(artist: Artist) {
+    if (!artist.spotify_artist_id) return // button is disabled in this case, but be defensive
+    const current = scanStatus[artist.id]
+    if (current?.kind === 'running') return
+
+    const ok = window.confirm(
+      `Scan ${artist.name}? Their post-Jan-2026 releases will be published live.`,
+    )
+    if (!ok) return
+
+    setScanStatus((prev) => ({ ...prev, [artist.id]: { kind: 'running' } }))
+
+    try {
+      const res = await fetch(`/api/admin/artists/${artist.id}/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error || `Request failed (${res.status})`)
+      }
+      const published = typeof data.published === 'number' ? data.published : 0
+      const duplicates = typeof data.duplicates === 'number' ? data.duplicates : 0
+      setScanStatus((prev) => ({
+        ...prev,
+        [artist.id]: { kind: 'success', published, duplicates },
+      }))
+      // Patch the local row's last_scanned_at so the chip flips to "just now"
+      // without waiting for a full refetch.
+      const stampedAt = new Date().toISOString()
+      setArtists((prev) =>
+        prev.map((a) => (a.id === artist.id ? { ...a, last_scanned_at: stampedAt } : a)),
+      )
+    } catch (err) {
+      setScanStatus((prev) => ({
+        ...prev,
+        [artist.id]: {
+          kind: 'error',
+          message: err instanceof Error ? err.message : 'Scan failed',
+        },
+      }))
     }
   }
 
@@ -297,7 +391,7 @@ export default function ArtistsListPage() {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <input
             type="search"
             placeholder="Search by name…"
@@ -323,6 +417,15 @@ export default function ArtistsListPage() {
             <option value="">All artists</option>
             <option value="true">Tracked only</option>
             <option value="false">Untracked stubs</option>
+          </select>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as 'updated_desc' | 'scanned_asc_nulls_first')}
+            aria-label="Sort order"
+            className="bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-3 py-2 text-[var(--color-fg-primary)] focus:border-[var(--color-border-strong)] transition-colors"
+          >
+            <option value="updated_desc">Recently updated</option>
+            <option value="scanned_asc_nulls_first">Least recently scanned</option>
           </select>
         </div>
 
@@ -401,6 +504,8 @@ export default function ArtistsListPage() {
             <ul className="space-y-2">
               {artists.map((artist) => {
                 const selected = selectedIds.has(artist.id)
+                const scan = scanStatus[artist.id] ?? { kind: 'idle' as const }
+                const hasSpotifyId = !!artist.spotify_artist_id
                 return (
                   <li
                     key={artist.id}
@@ -449,6 +554,18 @@ export default function ArtistsListPage() {
                           )}
                         </div>
                       </Link>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => runSingleScan(artist)}
+                          disabled={!hasSpotifyId || scan.kind === 'running'}
+                          title={hasSpotifyId ? 'Scan this artist for new Spotify releases' : 'No Spotify ID'}
+                          className="text-xs font-semibold rounded-[var(--radius)] px-2.5 py-1 border border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {scan.kind === 'running' ? 'Scanning…' : 'Scan now'}
+                        </button>
+                        <ScanRowStatusChip status={scan} lastScannedAt={artist.last_scanned_at} />
+                      </div>
                     </div>
                   </li>
                 )
@@ -562,6 +679,46 @@ function TriCheckbox({
       aria-label={ariaLabel}
       className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer"
     />
+  )
+}
+
+// Inline status chip for the Scan now button. Idle shows the relative-time
+// stamp; running/success/error show the live outcome of the most recent scan.
+function ScanRowStatusChip({
+  status,
+  lastScannedAt,
+}: {
+  status: ScanRowStatus
+  lastScannedAt: string | null
+}) {
+  if (status.kind === 'running') {
+    return (
+      <span className="text-[10px] text-[var(--color-fg-tertiary)] font-mono">
+        Scanning…
+      </span>
+    )
+  }
+  if (status.kind === 'success') {
+    return (
+      <span className="text-[10px] text-[var(--color-success)] font-mono">
+        +{status.published} published · {status.duplicates} dupes
+      </span>
+    )
+  }
+  if (status.kind === 'error') {
+    return (
+      <span
+        className="text-[10px] text-[var(--color-error)] font-mono truncate max-w-[12rem]"
+        title={status.message}
+      >
+        {status.message}
+      </span>
+    )
+  }
+  return (
+    <span className="text-[10px] text-[var(--color-fg-tertiary)] font-mono">
+      Last scanned: {formatRelativeTime(lastScannedAt)}
+    </span>
   )
 }
 

@@ -4,13 +4,10 @@ import { getAccessToken } from '@/lib/spotify'
 import {
   DEFAULT_SINCE_DATE,
   SCRAPE_DELAY_MS,
-  SPOTIFY_MARKET,
-  albumToSubmissionRow,
-  fetchArtistReleasesSince,
   fetchBackfillMeta,
   resolveSubmissionRef,
-  type SubmissionScrapeRow,
 } from '@/lib/spotifyNewReleases'
+import { processArtistScrape, type ScrapeNote } from '@/lib/spotifyArtistScrape'
 
 // Spotify scraper for tracked (whitelisted) artists. Scraped drops auto-publish:
 // rows are inserted as status='approved' and are immediately public. Chunked +
@@ -32,8 +29,6 @@ const BACKFILL_MAX_LIMIT = 200
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
-
-type ScrapeError = { artist?: string; id?: string; error: string }
 
 function isValidSinceDate(v: unknown): v is string {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
@@ -110,14 +105,18 @@ export async function POST(request: Request) {
   let queued = 0
   let skippedDuplicates = 0
   let skippedOld = 0
-  const errors: ScrapeError[] = []
-  const warnings: ScrapeError[] = []
+  const errors: ScrapeNote[] = []
+  const warnings: ScrapeNote[] = []
   let rateLimited = false
   let abortedAtIndex: number | null = null
   // Retry-After (seconds) from a 429, and whether this chunk made any successful
   // (non-429) Spotify call before stopping — both drive the client's back-off.
   let retryAfterSeconds: number | null = null
   let madeProgress = false
+  // Additive telemetry: per-artist summaries the client uses for an activity feed.
+  // Only artists with a successful scrape land here; 429-aborts and live errors
+  // are surfaced via errors[] / warnings[] instead.
+  const chunkArtists: { id: string; name: string; published: number; duplicates: number; oldSkipped: number }[] = []
 
   const targets = (artists ?? []).filter((a) => typeof a.spotify_artist_id === 'string' && a.spotify_artist_id)
 
@@ -125,89 +124,45 @@ export async function POST(request: Request) {
     const artist = targets[i]
     artistsScanned++
 
-    const result = await fetchArtistReleasesSince(artist.spotify_artist_id as string, token, {
+    const outcome = await processArtistScrape(
+      supabase,
+      token,
+      { id: artist.id as string, name: artist.name as string, spotify_artist_id: artist.spotify_artist_id as string },
       sinceDate,
-      market: SPOTIFY_MARKET,
-      pageSize: 10,
+      approvedAt,
       delayMs,
-    })
+    )
 
-    if (!result.ok) {
-      if (result.rateLimited) {
-        // Stop this chunk immediately and surface a resumable cursor + the
-        // Retry-After so the client backs off correctly. A 429 that fetched >=1
-        // page first still counts as progress (token not fully throttled).
-        if (result.pagesFetched > 0) madeProgress = true
-        rateLimited = true
-        retryAfterSeconds = result.retryAfter
-        abortedAtIndex = i
-        errors.push({ artist: artist.name, error: `Rate limited (429)${result.retryAfter ? `, retry after ${result.retryAfter}s` : ''}` })
-        break
-      }
-      // A non-429 error is still a live (un-throttled) response → counts as
-      // progress for the client's consecutive-429 detection.
-      madeProgress = true
-      errors.push({ artist: artist.name, error: result.error })
-      await sleep(delayMs)
-      continue
+    releasesSeen += outcome.releasesSeen
+    queued += outcome.published
+    skippedDuplicates += outcome.duplicates
+    skippedOld += outcome.oldSkipped
+    if (outcome.errors.length > 0) errors.push(...outcome.errors)
+    if (outcome.cappedGroups.length > 0) {
+      warnings.push({
+        artist: artist.name as string,
+        error: `Page cap hit for groups: ${outcome.cappedGroups.join(', ')} — some older releases may not have been scanned`,
+      })
+    }
+    if (outcome.madeProgress) madeProgress = true
+
+    if (outcome.rateLimited) {
+      // Stop this chunk immediately and surface a resumable cursor + the
+      // Retry-After so the client backs off correctly.
+      rateLimited = true
+      retryAfterSeconds = outcome.retryAfter
+      abortedAtIndex = i
+      break
     }
 
-    // A successful fetch resets any consecutive-429 streak on the client.
-    madeProgress = true
-
-    // No silent truncation: flag artists whose release list hit the page cap.
-    if (result.cappedGroups.length > 0) {
-      warnings.push({ artist: artist.name, error: `Page cap hit for groups: ${result.cappedGroups.join(', ')} — some older releases may not have been scanned` })
-    }
-
-    releasesSeen += result.items.length
-
-    // Transform + sinceDate filter + intra-artist dedup by source_url.
-    const seen = new Set<string>()
-    const candidates: SubmissionScrapeRow[] = []
-    for (const album of result.items) {
-      const mapped = albumToSubmissionRow(album, artist.id as string, sinceDate, approvedAt)
-      if ('skip' in mapped) {
-        if (mapped.skip === 'old') skippedOld++
-        continue
-      }
-      if (seen.has(mapped.row.source_url)) continue
-      seen.add(mapped.row.source_url)
-      candidates.push(mapped.row)
-    }
-
-    if (candidates.length > 0) {
-      // Dedup against existing rows first (clear counting), then upsert with
-      // ON CONFLICT DO NOTHING as a race guard.
-      const urls = candidates.map((c) => c.source_url)
-      const { data: existing, error: existErr } = await supabase
-        .from('submissions')
-        .select('source_url')
-        .in('source_url', urls)
-      if (existErr) {
-        errors.push({ artist: artist.name, error: `dedup check: ${existErr.message}` })
-        await sleep(delayMs)
-        continue
-      }
-      const existingSet = new Set((existing ?? []).map((e) => e.source_url as string))
-      const fresh = candidates.filter((c) => !existingSet.has(c.source_url))
-      skippedDuplicates += candidates.length - fresh.length
-
-      if (fresh.length > 0) {
-        const { data: inserted, error: insErr } = await supabase
-          .from('submissions')
-          .upsert(fresh, { onConflict: 'source_url', ignoreDuplicates: true })
-          .select('id')
-        if (insErr) {
-          errors.push({ artist: artist.name, error: `insert: ${insErr.message}` })
-        } else {
-          const insertedCount = inserted?.length ?? 0
-          queued += insertedCount
-          // Any shortfall vs. fresh means a concurrent run won the race -> duplicate.
-          const raceSkipped = fresh.length - insertedCount
-          if (raceSkipped > 0) skippedDuplicates += raceSkipped
-        }
-      }
+    if (outcome.scrapeOk) {
+      chunkArtists.push({
+        id: artist.id as string,
+        name: artist.name as string,
+        published: outcome.published,
+        duplicates: outcome.duplicates,
+        oldSkipped: outcome.oldSkipped,
+      })
     }
 
     await sleep(delayMs)
@@ -241,6 +196,7 @@ export async function POST(request: Request) {
     retryAfter: retryAfterSeconds,
     madeProgress,
     nextCursor,
+    chunkArtists,
   })
 }
 
@@ -271,7 +227,7 @@ async function handleBackfill(
   let scanned = 0
   let filled = 0
   let skipped = 0
-  const errors: ScrapeError[] = []
+  const errors: ScrapeNote[] = []
   let rateLimited = false
   let retryAfterSeconds: number | null = null
   let madeProgress = false

@@ -31,6 +31,11 @@ export async function GET(request: Request) {
   const limit = Math.min(Number(searchParams.get('limit') || 50), 200)
   const offset = Math.max(Number(searchParams.get('offset') || 0), 0)
   const tierOk = tier === 'featured' || tier === 'active' || tier === 'watch'
+  // Sort modes. Default = recently updated (existing behaviour).
+  // scanned_asc_nulls_first = least-recently-scanned first (nulls = "never
+  // scanned", which naturally surface for retry); the scrapers UI surfaces
+  // this so the next bulk run can prioritise stale artists.
+  const sort = searchParams.get('sort') || 'updated_desc'
 
   // "Select all matching" mode: return every matching id (up to MAX_IDS) plus the
   // true total, so the UI can act on the whole filtered set, not just the page.
@@ -53,9 +58,19 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from('artists')
-    .select('id, name, slug, tier, status, is_tracked, country, city, subgenres, image_url, updated_at', { count: 'exact' })
-    .order('updated_at', { ascending: false })
+    .select(
+      'id, name, slug, tier, status, is_tracked, country, city, subgenres, image_url, updated_at, last_scanned_at, spotify_artist_id',
+      { count: 'exact' },
+    )
     .range(offset, offset + limit - 1)
+
+  if (sort === 'scanned_asc_nulls_first') {
+    // Never-scanned (NULL) artists float to the top so the next bulk run picks
+    // them up first; among scanned artists, oldest first.
+    query = query.order('last_scanned_at', { ascending: true, nullsFirst: true })
+  } else {
+    query = query.order('updated_at', { ascending: false })
+  }
 
   if (search) {
     query = query.ilike('name', `%${search}%`)

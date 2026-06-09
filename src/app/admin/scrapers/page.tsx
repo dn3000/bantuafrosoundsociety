@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 // Drives POST /api/admin/scrapers/spotify-new-releases from the browser. The
@@ -10,6 +10,17 @@ import Link from 'next/link'
 // not this page. The scraper only scans tracked (whitelisted) artists.
 
 type ScrapeNote = { artist?: string; id?: string; error: string }
+// Per-artist summary from the server's chunkArtists[] — drives the activity feed.
+type ChunkArtist = {
+  id: string
+  name: string
+  published: number
+  duplicates: number
+  oldSkipped: number
+}
+// How many recent per-artist rows to show in the activity feed (capped low
+// so the panel stays compact — the run log lives in errors/warnings).
+const RECENT_ARTISTS_LIMIT = 5
 type ScanTotals = {
   artistsScanned: number
   releasesSeen: number
@@ -105,6 +116,13 @@ function formatResumeAfter(seconds: number | null): string {
   return `after ~${Math.ceil(seconds / 60)}m`
 }
 
+// "~3m" / "~45s" — used for the ETA chip. Mirrors formatResumeAfter's bucketing.
+function formatEta(seconds: number): string {
+  const s = Math.max(1, Math.round(seconds))
+  if (s < 90) return `~${s}s`
+  return `~${Math.ceil(s / 60)}m`
+}
+
 export default function ScrapersPage() {
   // Controls
   const [tier, setTier] = useState('') // '' = all tracked
@@ -136,6 +154,16 @@ export default function ScrapersPage() {
   const [rateLimitStop, setRateLimitStop] = useState<
     { retryAfterSeconds: number | null; reason: 'long' | 'repeated' } | null
   >(null)
+  // Last N artists processed across all chunks, most-recent first. Drives the
+  // "activity feed" below the per-chunk metrics so the operator can see which
+  // artists actually got scanned during a long run.
+  const [recentArtists, setRecentArtists] = useState<ChunkArtist[]>([])
+  // Wall-clock when this run started — drives the ETA below the progress bar.
+  // null while idle (no in-flight run); reset at the start of every runScan.
+  const [runStartMs, setRunStartMs] = useState<number | null>(null)
+  // Ticks every second during a run so the elapsed-driven ETA refreshes even
+  // when no new chunk has arrived (between calls or during a cooldown).
+  const [, setEtaTick] = useState(0)
 
   // stopRef short-circuits the async loop; abortRef cancels the in-flight chunk.
   const stopRef = useRef(false)
@@ -160,7 +188,17 @@ export default function ScrapersPage() {
     setTotalPlaylists(0)
     setPosition(0)
     setBackfillPage(0)
+    setRecentArtists([])
+    setRunStartMs(Date.now())
   }
+
+  // Tick the ETA chip every second while running so it stays fresh between
+  // chunks. Cheap (one setState/sec); stops on phase change.
+  useEffect(() => {
+    if (phase !== 'running') return
+    const id = setInterval(() => setEtaTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [phase])
 
   function stop() {
     stopRef.current = true
@@ -224,6 +262,14 @@ export default function ScrapersPage() {
         if (Array.isArray(data.errors)) errs.push(...data.errors)
         if (Array.isArray(data.warnings)) warns.push(...data.warnings)
         if (typeof data.totalWhitelist === 'number') whitelist = data.totalWhitelist
+
+        // Activity feed: take the chunk's per-artist summaries, most-recent
+        // first within the chunk, prepend to the running list, keep the last
+        // RECENT_ARTISTS_LIMIT across all chunks.
+        if (Array.isArray(data.chunkArtists) && data.chunkArtists.length > 0) {
+          const fromChunk = (data.chunkArtists as ChunkArtist[]).slice().reverse()
+          setRecentArtists((prev) => [...fromChunk, ...prev].slice(0, RECENT_ARTISTS_LIMIT))
+        }
 
         setScanTotals({ ...totals })
         setErrors([...errs])
@@ -447,6 +493,19 @@ export default function ScrapersPage() {
   const denom = runMode === 'playlist' ? totalPlaylists : totalWhitelist
   const pct = denom > 0 ? Math.min(100, Math.round((position / denom) * 100)) : 0
   const showProgressCounter = (runMode === 'scan' || runMode === 'playlist') && denom > 0
+  // ETA for the artist scan: extrapolate from elapsed-per-artist. Only shown
+  // once artistsScanned > 2 so a single fast/slow chunk doesn't wild-swing the
+  // estimate. Suppressed when the run isn't actively running.
+  const etaSeconds: number | null = (() => {
+    if (runMode !== 'scan' || phase !== 'running') return null
+    if (runStartMs == null) return null
+    if (scanTotals.artistsScanned <= 2) return null
+    if (totalWhitelist <= scanTotals.artistsScanned) return null
+    const elapsedMs = Math.max(0, Date.now() - runStartMs)
+    const perArtistMs = elapsedMs / scanTotals.artistsScanned
+    const remaining = totalWhitelist - scanTotals.artistsScanned
+    return Math.round((remaining * perArtistMs) / 1000)
+  })()
   const statusLabel =
     phase === 'running'
       ? runMode === 'scan'
@@ -730,12 +789,20 @@ export default function ScrapersPage() {
             </div>
 
             {showProgressCounter && (
-              <div className="w-full h-2 bg-[var(--color-bg-base)] rounded-full overflow-hidden mb-4">
-                <div
-                  className="h-full bg-[var(--color-accent)] transition-all duration-300"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
+              <>
+                <div className="w-full h-2 bg-[var(--color-bg-base)] rounded-full overflow-hidden mb-1">
+                  <div
+                    className="h-full bg-[var(--color-accent)] transition-all duration-300"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                {etaSeconds !== null && (
+                  <p className="text-[11px] text-[var(--color-fg-tertiary)] font-mono mb-4">
+                    ETA: {formatEta(etaSeconds)}
+                  </p>
+                )}
+                {etaSeconds === null && <div className="mb-4" />}
+              </>
             )}
 
             {runMode === 'scan' ? (
@@ -762,6 +829,26 @@ export default function ScrapersPage() {
                 <Metric label="Filled" value={backfillTotals.filled} accent />
                 <Metric label="Skipped" value={backfillTotals.skipped} />
                 <Metric label="Errors" value={errors.length} error={errors.length > 0} />
+              </div>
+            )}
+
+            {runMode === 'scan' && recentArtists.length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs font-semibold text-[var(--color-fg-tertiary)] mb-1">
+                  Recent activity
+                </div>
+                <ul className="bg-[var(--color-bg-base)] rounded-[var(--radius-sm)] p-2 text-xs text-[var(--color-fg-secondary)] font-mono space-y-1">
+                  {recentArtists.map((a, i) => (
+                    <li key={`${a.id}-${i}`} className="truncate">
+                      <span className="text-[var(--color-fg-primary)]">{a.name}</span>
+                      <span className="text-[var(--color-fg-tertiary)]"> · </span>
+                      <span className={a.published > 0 ? 'text-[var(--color-accent)]' : ''}>
+                        +{a.published} published
+                      </span>
+                      <span className="text-[var(--color-fg-tertiary)]"> · {a.duplicates} dupes</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 
