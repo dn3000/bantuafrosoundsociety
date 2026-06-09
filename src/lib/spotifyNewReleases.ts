@@ -166,11 +166,12 @@ export type FetchReleasesResult =
 // Fetch an artist's album + single releases on/after `sinceDate`, market-scoped.
 //
 // Sweeps each include_group ('album','single') separately at the API's hard
-// page cap (10), paginating by offset newest-first and stopping a group as soon
-// as a page contains a release older than sinceDate (boundary reached). This is
-// correct because within a single group Spotify returns reverse-chronological
-// order. Items older than sinceDate may appear on the final boundary page —
-// callers still date-filter each item. Paces itself between calls.
+// page cap (10), paginating by offset newest-first and stopping a group once an
+// entire page predates sinceDate (we've paged past the window). This is correct
+// because within a single group Spotify returns reverse-chronological order, so
+// once a full page is old every later page is too. Items older than sinceDate
+// may still appear on boundary pages — callers date-filter each item. Paces
+// itself between calls.
 export async function fetchArtistReleasesSince(
   spotifyArtistId: string,
   token: string,
@@ -210,11 +211,17 @@ export async function fetchArtistReleasesSince(
       page++
       items.push(...pageItems)
 
-      const reachedOld = pageItems.some((it) => {
+      // Smart-stop: only stop once an ENTIRE page predates sinceDate — we've
+      // paged past the window. Safe because Spotify orders reverse-chronologically
+      // within a group, so every later page is fully old too. Requiring the whole
+      // page (vs. any single item) guards against intra-group ordering quirks
+      // (e.g. mixed release_date_precision). A null/unparseable date counts as
+      // not-old, so a single uncertain item keeps us paginating.
+      const allOld = pageItems.every((it) => {
         const d = parseReleaseDate(it.release_date, it.release_date_precision)
         return d !== null && d < sinceDate
       })
-      if (reachedOld) break
+      if (allOld) break
       if (!data.next || pageItems.length < pageSize) break
       offset += pageSize
       if (page >= maxPages) {
