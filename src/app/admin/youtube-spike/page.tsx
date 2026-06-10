@@ -13,10 +13,10 @@ export default function YouTubeSpikePage() {
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const [name, handle] = line.split(',').map((s) => s.trim())
-        return { name, handle }
+        const [name, value] = line.split(',').map((s) => s.trim())
+        return { name, value }
       })
-      .filter((a) => a.name && a.handle)
+      .filter((a) => a.name && a.value)
 
     setLoading(true)
     setResult(null)
@@ -39,7 +39,7 @@ export default function YouTubeSpikePage() {
     <div style={{ padding: '2rem', fontFamily: 'monospace' }}>
       <h1>YouTube spike — OAC vs Topic channel</h1>
       <p style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-        One artist per line: <code>Name, @handle</code>
+        One artist per line: <code>Name, @handle OR channel ID</code>
       </p>
       <textarea
         value={input}

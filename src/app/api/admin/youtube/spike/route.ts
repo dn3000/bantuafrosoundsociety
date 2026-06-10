@@ -7,7 +7,7 @@ import {
   searchChannel,
 } from '@/lib/youtube'
 
-type ArtistInput = { name: string; handle: string }
+type ArtistInput = { name: string; value: string }
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -38,8 +38,8 @@ export async function POST(request: Request) {
   let searchOpsUsed = 0
 
   const results = await Promise.all(
-    artists.map(async ({ name, handle }) => {
-      // --- Official Artist Channel via handle ---
+    artists.map(async ({ name, value }) => {
+      // --- Official Artist Channel: channel ID (UC… 24 chars) or handle ---
       let oac: {
         channelId: string
         title: string
@@ -47,7 +47,10 @@ export async function POST(request: Request) {
         recentUploads: Awaited<ReturnType<typeof getRecentUploads>>
       } | null = null
 
-      const oacChannel = await resolveChannelByHandle(handle)
+      const isChannelId = value.startsWith('UC') && value.length === 24
+      const oacChannel = isChannelId
+        ? await getChannelById(value)
+        : await resolveChannelByHandle(value)
       if (oacChannel) {
         const uploads = await getRecentUploads(oacChannel.uploadsPlaylistId)
         oac = { ...oacChannel, recentUploads: uploads }
