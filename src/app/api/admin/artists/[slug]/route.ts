@@ -12,6 +12,7 @@ const EDITABLE_FIELDS = [
   'website_url', 'instagram_handle', 'twitter_handle', 'tiktok_handle', 'facebook_url',
   'bandcamp_url', 'soundcloud_url', 'discogs_url', 'wikipedia_url', 'youtube_url',
   'spotify_artist_id', 'musicbrainz_artist_id',
+  'youtube_channel_id', 'youtube_topic_channel_id',
   'private_notes',
   'last_release_date', 'last_contact_date',
 ] as const

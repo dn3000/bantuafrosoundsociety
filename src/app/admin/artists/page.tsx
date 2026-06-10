@@ -157,6 +157,9 @@ export default function ArtistsListPage() {
   // filter context).
   const [scanStatus, setScanStatus] = useState<Record<string, ScanRowStatus>>({})
 
+  // Which artist's YT resolution panel is open (at most one at a time).
+  const [ytOpenId, setYtOpenId] = useState<string | null>(null)
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const showingFrom = total === 0 ? 0 : page * PAGE_SIZE + 1
   const showingTo = Math.min(total, (page + 1) * PAGE_SIZE)
@@ -207,6 +210,7 @@ export default function ArtistsListPage() {
     setSelectedIds(new Set())
     setAllMatchingCapped(false)
     setScanStatus({})
+    setYtOpenId(null)
   }, [search, tierFilter, trackedFilter, sort])
 
   useEffect(() => {
@@ -606,18 +610,39 @@ export default function ArtistsListPage() {
                         </div>
                       </Link>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => runSingleScan(artist)}
-                          disabled={!hasSpotifyId || scan.kind === 'running'}
-                          title={hasSpotifyId ? 'Scan this artist for new Spotify releases' : 'No Spotify ID'}
-                          className="text-xs font-semibold rounded-[var(--radius)] px-2.5 py-1 border border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {scan.kind === 'running' ? 'Scanning…' : 'Scan now'}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setYtOpenId((prev) => (prev === artist.id ? null : artist.id))}
+                            className={`text-xs font-semibold rounded-[var(--radius)] px-2.5 py-1 border transition-colors ${
+                              ytOpenId === artist.id
+                                ? 'border-[var(--color-accent)] text-[var(--color-accent)]'
+                                : 'border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)]'
+                            }`}
+                          >
+                            Resolve YT
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => runSingleScan(artist)}
+                            disabled={!hasSpotifyId || scan.kind === 'running'}
+                            title={hasSpotifyId ? 'Scan this artist for new Spotify releases' : 'No Spotify ID'}
+                            className="text-xs font-semibold rounded-[var(--radius)] px-2.5 py-1 border border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {scan.kind === 'running' ? 'Scanning…' : 'Scan now'}
+                          </button>
+                        </div>
                         <ScanRowStatusChip status={scan} lastScannedAt={artist.last_scanned_at} />
                       </div>
                     </div>
+                    {ytOpenId === artist.id && (
+                      <YtResolutionPanel
+                        slug={artist.slug}
+                        name={artist.name}
+                        onClose={() => setYtOpenId(null)}
+                        onSaved={fetchArtists}
+                      />
+                    )}
                   </li>
                 )
               })}
@@ -705,6 +730,385 @@ export default function ArtistsListPage() {
     </div>
   )
 }
+
+// ─── YouTube resolution panel ──────────────────────────────────────────────
+
+type YtChannelInfo = {
+  channelId: string
+  title: string
+  thumbnail: string | null
+  isTopic: boolean
+}
+
+type YtPanelStep = 'idle' | 'loading' | 'suggesting' | 'resolving' | 'saving'
+
+function YtResolutionPanel({
+  slug,
+  name,
+  onClose,
+  onSaved,
+}: {
+  slug: string
+  name: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [step, setStep] = useState<YtPanelStep>('loading')
+  const [currentOacId, setCurrentOacId] = useState<string | null>(null)
+  const [currentTopicId, setCurrentTopicId] = useState<string | null>(null)
+  const [panelError, setPanelError] = useState<string | null>(null)
+
+  // Auto-resolve state
+  const [proposedOac, setProposedOac] = useState<YtChannelInfo | null>(null)
+  const [proposedTopic, setProposedTopic] = useState<YtChannelInfo | null>(null)
+  const [confirmOac, setConfirmOac] = useState(false)
+  const [confirmTopic, setConfirmTopic] = useState(false)
+  const [hasSuggestions, setHasSuggestions] = useState(false)
+
+  // Paste resolve state
+  const [pasteInput, setPasteInput] = useState('')
+  const [pasteResult, setPasteResult] = useState<YtChannelInfo | null>(null)
+  const [pasteSlot, setPasteSlot] = useState<'oac' | 'topic' | null>(null)
+  const [pasteConfirmed, setPasteConfirmed] = useState(false)
+
+  // Load current IDs on open
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setStep('loading')
+      try {
+        const res = await fetch(`/api/admin/artists/${slug}`)
+        if (!cancelled && res.ok) {
+          const data = await res.json()
+          setCurrentOacId(data.artist?.youtube_channel_id ?? null)
+          setCurrentTopicId(data.artist?.youtube_topic_channel_id ?? null)
+        }
+      } finally {
+        if (!cancelled) setStep('idle')
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [slug])
+
+  async function handleAutoResolve() {
+    setStep('suggesting')
+    setPanelError(null)
+    try {
+      const res = await fetch(`/api/admin/artists/${slug}/youtube/suggest`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Suggest failed')
+      const oac: YtChannelInfo | null = data.oac
+        ? { ...data.oac, isTopic: false }
+        : null
+      const topic: YtChannelInfo | null = data.topic
+        ? { ...data.topic, isTopic: true }
+        : null
+      setProposedOac(oac)
+      setProposedTopic(topic)
+      setConfirmOac(!!oac)
+      setConfirmTopic(!!topic)
+      setHasSuggestions(true)
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : 'Failed to get suggestions')
+    } finally {
+      setStep('idle')
+    }
+  }
+
+  async function handlePasteResolve() {
+    if (!pasteInput.trim()) return
+    setStep('resolving')
+    setPanelError(null)
+    try {
+      const res = await fetch(`/api/admin/artists/${slug}/youtube/resolve-input`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: pasteInput }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Resolve failed')
+      const info: YtChannelInfo = {
+        channelId: data.channelId,
+        title: data.title,
+        thumbnail: data.thumbnail ?? null,
+        isTopic: !!data.isTopic,
+      }
+      setPasteResult(info)
+      setPasteSlot(info.isTopic ? 'topic' : 'oac')
+      setPasteConfirmed(true)
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : 'Failed to resolve')
+    } finally {
+      setStep('idle')
+    }
+  }
+
+  async function handleSave() {
+    const updates: Record<string, string | null> = {}
+    if (hasSuggestions) {
+      if (confirmOac && proposedOac) updates.youtube_channel_id = proposedOac.channelId
+      if (confirmTopic && proposedTopic) updates.youtube_topic_channel_id = proposedTopic.channelId
+    }
+    if (pasteResult && pasteConfirmed && pasteSlot) {
+      updates[pasteSlot === 'oac' ? 'youtube_channel_id' : 'youtube_topic_channel_id'] =
+        pasteResult.channelId
+    }
+    if (Object.keys(updates).length === 0) return
+
+    setStep('saving')
+    setPanelError(null)
+    try {
+      const res = await fetch(`/api/admin/artists/${slug}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Save failed')
+      setCurrentOacId(data.artist?.youtube_channel_id ?? currentOacId)
+      setCurrentTopicId(data.artist?.youtube_topic_channel_id ?? currentTopicId)
+      setHasSuggestions(false)
+      setProposedOac(null)
+      setProposedTopic(null)
+      setPasteResult(null)
+      setPasteInput('')
+      onSaved()
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setStep('idle')
+    }
+  }
+
+  const isBusy = step !== 'idle'
+  const hasChanges =
+    (hasSuggestions && (confirmOac || confirmTopic)) ||
+    (pasteResult !== null && pasteConfirmed && pasteSlot !== null)
+
+  return (
+    <div className="border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-base)] rounded-b-[var(--radius-md)] px-3 py-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-4 text-xs">
+          <span className="text-[var(--color-fg-tertiary)] font-medium">YouTube:</span>
+          <span className={currentOacId ? 'text-[var(--color-success)]' : 'text-[var(--color-fg-tertiary)]'}>
+            OAC {currentOacId ? '✓' : '—'}
+            {currentOacId && (
+              <span className="ml-1 font-mono text-[9px] text-[var(--color-fg-tertiary)]">
+                {currentOacId.slice(0, 12)}…
+              </span>
+            )}
+          </span>
+          <span className={currentTopicId ? 'text-[var(--color-success)]' : 'text-[var(--color-fg-tertiary)]'}>
+            Topic {currentTopicId ? '✓' : '—'}
+            {currentTopicId && (
+              <span className="ml-1 font-mono text-[9px] text-[var(--color-fg-tertiary)]">
+                {currentTopicId.slice(0, 12)}…
+              </span>
+            )}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-[10px] text-[var(--color-fg-tertiary)] hover:text-[var(--color-fg-primary)] transition-colors"
+        >
+          ✕
+        </button>
+      </div>
+
+      {step === 'loading' ? (
+        <p className="text-xs text-[var(--color-fg-tertiary)]">Loading…</p>
+      ) : (
+        <>
+          {/* Auto-resolve */}
+          <div className="mb-3">
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                type="button"
+                onClick={handleAutoResolve}
+                disabled={isBusy}
+                className="text-xs font-semibold rounded-[var(--radius)] px-2.5 py-1 border border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {step === 'suggesting' ? 'Searching…' : 'Auto-resolve'}
+              </button>
+              <span className="text-[10px] text-[var(--color-fg-tertiary)]">
+                uses ~2 of your ~100 daily YouTube searches
+              </span>
+            </div>
+            {hasSuggestions && (
+              <div className="grid grid-cols-2 gap-2">
+                <YtChannelCard
+                  label="Topic channel"
+                  channel={proposedTopic}
+                  confirmed={confirmTopic}
+                  onToggle={() => setConfirmTopic((v) => !v)}
+                />
+                <YtChannelCard
+                  label="Official Artist Channel"
+                  channel={proposedOac}
+                  confirmed={confirmOac}
+                  onToggle={() => setConfirmOac((v) => !v)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Manual paste */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Paste channel URL or @handle…"
+                value={pasteInput}
+                onChange={(e) => {
+                  setPasteInput(e.target.value)
+                  setPasteResult(null)
+                  setPasteConfirmed(false)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isBusy && pasteInput.trim()) handlePasteResolve()
+                }}
+                className="flex-1 text-xs bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-2 py-1.5 text-[var(--color-fg-primary)] placeholder:text-[var(--color-fg-tertiary)] focus:border-[var(--color-border-strong)] transition-colors"
+              />
+              <button
+                type="button"
+                onClick={handlePasteResolve}
+                disabled={!pasteInput.trim() || isBusy}
+                className="text-xs font-semibold rounded-[var(--radius)] px-2.5 py-1 border border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {step === 'resolving' ? 'Resolving…' : 'Resolve'}
+              </button>
+            </div>
+
+            {pasteResult && (
+              <div className="mt-2 p-2 bg-[var(--color-bg-elevated)] rounded-[var(--radius)] border border-[var(--color-border-subtle)] flex items-center gap-2">
+                {pasteResult.thumbnail && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={pasteResult.thumbnail}
+                    alt=""
+                    className="w-8 h-8 rounded object-cover flex-shrink-0"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-[var(--color-fg-primary)] truncate">
+                    {pasteResult.title}
+                  </p>
+                  <p className="font-mono text-[9px] text-[var(--color-fg-tertiary)]">
+                    {pasteResult.channelId}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <select
+                    value={pasteSlot ?? 'oac'}
+                    onChange={(e) => setPasteSlot(e.target.value as 'oac' | 'topic')}
+                    className="text-[10px] bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded px-1 py-0.5 text-[var(--color-fg-primary)]"
+                  >
+                    <option value="oac">OAC</option>
+                    <option value="topic">Topic</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setPasteConfirmed((v) => !v)}
+                    className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+                      pasteConfirmed
+                        ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-fg-primary)]'
+                        : 'border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:border-[var(--color-border-strong)]'
+                    }`}
+                  >
+                    {pasteConfirmed ? '✓ Confirmed' : 'Confirm'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {panelError && (
+            <p className="text-[10px] text-red-400 mb-2">{panelError}</p>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!hasChanges || isBusy}
+              className="text-xs font-semibold rounded-[var(--radius)] px-3 py-1.5 bg-[var(--color-accent)] text-[var(--color-fg-primary)] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {step === 'saving' ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function YtChannelCard({
+  label,
+  channel,
+  confirmed,
+  onToggle,
+}: {
+  label: string
+  channel: YtChannelInfo | null
+  confirmed: boolean
+  onToggle: () => void
+}) {
+  if (!channel) {
+    return (
+      <div className="p-2 rounded-[var(--radius)] border border-[var(--color-border-subtle)] text-center">
+        <p className="text-[10px] text-[var(--color-fg-tertiary)] font-medium">{label}</p>
+        <p className="text-[10px] text-[var(--color-fg-tertiary)] mt-0.5">Not found</p>
+      </div>
+    )
+  }
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(e) => e.key === 'Enter' && onToggle()}
+      className={`p-2 rounded-[var(--radius)] border cursor-pointer transition-colors ${
+        confirmed
+          ? 'border-[var(--color-accent)] bg-[var(--color-accent-subtle)]'
+          : 'border-[var(--color-border-subtle)] hover:border-[var(--color-border-default)]'
+      }`}
+    >
+      <p className="text-[9px] uppercase tracking-wider text-[var(--color-fg-tertiary)] mb-1">
+        {label}
+      </p>
+      <div className="flex items-center gap-1.5">
+        {channel.thumbnail && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={channel.thumbnail}
+            alt=""
+            className="w-6 h-6 rounded object-cover flex-shrink-0"
+          />
+        )}
+        <p className="text-[10px] font-medium text-[var(--color-fg-primary)] truncate">
+          {channel.title}
+        </p>
+      </div>
+      <div className="mt-1 flex items-center justify-between">
+        <span className="font-mono text-[9px] text-[var(--color-fg-tertiary)]">
+          {channel.channelId.slice(0, 14)}…
+        </span>
+        <span
+          className={`text-[10px] ${confirmed ? 'text-[var(--color-accent)]' : 'text-[var(--color-fg-tertiary)]'}`}
+        >
+          {confirmed ? '✓' : 'click to confirm'}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ─── End YouTube resolution panel ──────────────────────────────────────────
 
 function TriCheckbox({
   checked,

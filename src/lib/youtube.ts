@@ -4,6 +4,7 @@ type ChannelResult = {
   channelId: string
   title: string
   uploadsPlaylistId: string
+  thumbnail: string | null
 }
 
 type UploadItem = {
@@ -39,15 +40,25 @@ function extractChannel(json: unknown): ChannelResult | null {
     const item = (json as { items?: Array<Record<string, unknown>> })?.items?.[0] as
       | {
           id?: string
-          snippet?: { title?: string }
+          snippet?: {
+            title?: string
+            thumbnails?: {
+              medium?: { url?: string }
+              default?: { url?: string }
+            }
+          }
           contentDetails?: { relatedPlaylists?: { uploads?: string } }
         }
       | undefined
     const channelId = item?.id ?? null
     const title = item?.snippet?.title ?? null
     const uploadsPlaylistId = item?.contentDetails?.relatedPlaylists?.uploads ?? null
+    const thumbnail =
+      item?.snippet?.thumbnails?.medium?.url ??
+      item?.snippet?.thumbnails?.default?.url ??
+      null
     if (!channelId || !title || !uploadsPlaylistId) return null
-    return { channelId, title, uploadsPlaylistId }
+    return { channelId, title, uploadsPlaylistId, thumbnail }
   } catch {
     return null
   }
@@ -97,6 +108,24 @@ export async function getRecentUploads(
   }
 }
 
+type ChannelCandidate = {
+  channelId: string
+  title: string
+  thumbnail: string | null
+}
+
+export type ResolveResult = {
+  channelId: string
+  title: string
+  isTopic: boolean
+  thumbnail: string | null
+}
+
+export type SuggestResult = {
+  topic: ChannelCandidate | null
+  oac: ChannelCandidate | null
+}
+
 // Rationed operation: YouTube search costs 100 quota units per call.
 export async function searchChannel(query: string): Promise<SearchResult[]> {
   const json = await fetchYT(
@@ -117,5 +146,85 @@ export async function searchChannel(query: string): Promise<SearchResult[]> {
     })
   } catch {
     return []
+  }
+}
+
+// Accept youtube.com/@handle, youtube.com/channel/UC…, music.youtube.com/channel/UC…,
+// bare @handle, or bare UC… channel ID.
+export function parseYouTubeInput(
+  input: string,
+): { kind: 'id' | 'handle'; value: string } | null {
+  const s = input.trim()
+  if (!s) return null
+
+  // Try URL parse (add https if the string looks like a bare domain)
+  const toTry = /^https?:\/\//i.test(s) ? s : s.includes('.') ? `https://${s}` : null
+  if (toTry) {
+    try {
+      const url = new URL(toTry)
+      const host = url.hostname.replace(/^www\./, '')
+      if (host === 'youtube.com' || host === 'music.youtube.com') {
+        const channelMatch = url.pathname.match(/^\/channel\/(UC[\w-]{20,})/)
+        if (channelMatch) return { kind: 'id', value: channelMatch[1] }
+        const handleMatch = url.pathname.match(/^\/@([\w.-]+)/)
+        if (handleMatch) return { kind: 'handle', value: handleMatch[1] }
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  // Bare UC… channel ID
+  if (/^UC[\w-]{20,}$/.test(s)) return { kind: 'id', value: s }
+
+  // Bare @handle (@ prefix required to avoid ambiguity with plain words)
+  if (s.startsWith('@') && /^@[\w.-]+$/.test(s)) return { kind: 'handle', value: s.slice(1) }
+
+  return null
+}
+
+export async function resolveChannelByInput(input: string): Promise<ResolveResult | null> {
+  const parsed = parseYouTubeInput(input)
+  if (!parsed) return null
+  const channel =
+    parsed.kind === 'id'
+      ? await getChannelById(parsed.value)
+      : await resolveChannelByHandle(parsed.value)
+  if (!channel) return null
+  return {
+    channelId: channel.channelId,
+    title: channel.title,
+    isTopic: channel.title.endsWith(' - Topic'),
+    thumbnail: channel.thumbnail,
+  }
+}
+
+// Costs ~2 search quota units (100 units each).
+// Defensive: never throws, returns nulls for any failed arm.
+export async function suggestChannels(name: string): Promise<SuggestResult> {
+  try {
+    const [topicResults, oacResults] = await Promise.all([
+      searchChannel(`${name} topic`).catch(() => [] as SearchResult[]),
+      searchChannel(name).catch(() => [] as SearchResult[]),
+    ])
+
+    const topicCandidate = topicResults.find((r) => r.title.endsWith(' - Topic')) ?? null
+    const oacCandidate = oacResults.find((r) => !r.title.endsWith(' - Topic')) ?? null
+
+    const [topicHydrated, oacHydrated] = await Promise.all([
+      topicCandidate ? getChannelById(topicCandidate.channelId) : Promise.resolve(null),
+      oacCandidate ? getChannelById(oacCandidate.channelId) : Promise.resolve(null),
+    ])
+
+    return {
+      topic: topicHydrated
+        ? { channelId: topicHydrated.channelId, title: topicHydrated.title, thumbnail: topicHydrated.thumbnail }
+        : null,
+      oac: oacHydrated
+        ? { channelId: oacHydrated.channelId, title: oacHydrated.title, thumbnail: oacHydrated.thumbnail }
+        : null,
+    }
+  } catch {
+    return { topic: null, oac: null }
   }
 }
