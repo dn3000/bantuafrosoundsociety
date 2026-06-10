@@ -165,6 +165,17 @@ export default function ScrapersPage() {
   // when no new chunk has arrived (between calls or during a cooldown).
   const [, setEtaTick] = useState(0)
 
+  // YouTube Topic ingestion (one-shot, no cursor)
+  const [ytPhase, setYtPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [ytResult, setYtResult] = useState<{
+    artistsScanned: number
+    imagesBackfilled: number
+    inserted: number
+    duplicates: number
+    errors: { artist: string; error: string }[]
+  } | null>(null)
+  const [ytError, setYtError] = useState<string | null>(null)
+
   // stopRef short-circuits the async loop; abortRef cancels the in-flight chunk.
   const stopRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -488,6 +499,28 @@ export default function ScrapersPage() {
     }
   }
 
+  async function runYouTubeTopic() {
+    setYtPhase('running')
+    setYtResult(null)
+    setYtError(null)
+    try {
+      const res = await fetch('/api/admin/scrapers/youtube-topic', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
+      setYtResult({
+        artistsScanned: typeof data.artistsScanned === 'number' ? data.artistsScanned : 0,
+        imagesBackfilled: typeof data.imagesBackfilled === 'number' ? data.imagesBackfilled : 0,
+        inserted: typeof data.inserted === 'number' ? data.inserted : 0,
+        duplicates: typeof data.duplicates === 'number' ? data.duplicates : 0,
+        errors: Array.isArray(data.errors) ? data.errors : [],
+      })
+      setYtPhase('done')
+    } catch (err) {
+      setYtError(errMsg(err))
+      setYtPhase('error')
+    }
+  }
+
   // Progress denominator + percentage: artist scan counts artists, playlist scan
   // counts playlists; backfill has no fixed total.
   const denom = runMode === 'playlist' ? totalPlaylists : totalWhitelist
@@ -742,6 +775,48 @@ export default function ScrapersPage() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* YouTube Topic channel releases */}
+        <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
+          <h2 className="text-sm font-semibold text-[var(--color-fg-primary)] mb-2">YouTube Topic channel releases</h2>
+          <p className="text-sm text-[var(--color-fg-secondary)] mb-4">
+            Fetches recent uploads from each tracked artist&apos;s YouTube Topic channel and adds
+            them to the <strong>review queue as pending submissions</strong> — no auto-publish.
+            Also backfills missing artist profile images from YouTube channel thumbnails.
+            Costs ~1 quota unit per artist; safe to re-run (dedup by video ID).
+          </p>
+          <button
+            type="button"
+            onClick={runYouTubeTopic}
+            disabled={running || ytPhase === 'running'}
+            className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-50"
+          >
+            {ytPhase === 'running' ? 'Ingesting…' : 'Ingest YouTube releases (Topic)'}
+          </button>
+
+          {ytPhase === 'done' && ytResult && (
+            <div className="mt-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
+                <Metric label="Artists scanned" value={ytResult.artistsScanned} />
+                <Metric label="Images backfilled" value={ytResult.imagesBackfilled} accent />
+                <Metric label="Inserted" value={ytResult.inserted} accent />
+                <Metric label="Duplicates" value={ytResult.duplicates} />
+                <Metric label="Errors" value={ytResult.errors.length} error={ytResult.errors.length > 0} />
+              </div>
+              {ytResult.errors.length > 0 && (
+                <NoteList
+                  title={`Errors (${ytResult.errors.length})`}
+                  notes={ytResult.errors}
+                  tone="error"
+                />
+              )}
+            </div>
+          )}
+
+          {ytError && (
+            <p className="mt-3 text-sm text-[var(--color-error)]">{ytError}</p>
+          )}
         </div>
 
         {/* Rate-limit pause: short Retry-After — wait it out, then resume automatically */}

@@ -64,6 +64,14 @@ function extractChannel(json: unknown): ChannelResult | null {
   }
 }
 
+// Derive the uploads playlist ID for a YouTube channel via the UC→UU convention.
+// YouTube Music auto-generated Topic channels follow this pattern predictably,
+// saving an extra channels.list API call per artist.
+export function uploadsPlaylistId(channelId: string): string | null {
+  if (!channelId || !channelId.startsWith('UC')) return null
+  return 'UU' + channelId.slice(2)
+}
+
 export async function resolveChannelByHandle(handle: string): Promise<ChannelResult | null> {
   const h = handle.startsWith('@') ? handle.slice(1) : handle
   const json = await fetchYT(

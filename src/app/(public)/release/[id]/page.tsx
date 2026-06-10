@@ -23,6 +23,7 @@ type Release = {
   cover_image_url: string | null
   source_url: string
   embed_url: string | null
+  youtube_video_id: string | null
   artists: Artist | null
 }
 
@@ -79,7 +80,7 @@ async function fetchRelease(id: string): Promise<Release | null> {
   const { data } = await supabase
     .from('submissions')
     .select(
-      'id, title, type, release_date, artwork_url, cover_image_url, source_url, embed_url, artists(id, name, image_url, spotify_artist_id)'
+      'id, title, type, release_date, artwork_url, cover_image_url, source_url, embed_url, youtube_video_id, artists(id, name, image_url, spotify_artist_id)'
     )
     .eq('id', id)
     .eq('status', 'approved')
@@ -190,7 +191,7 @@ export default async function ReleaseDetailPage({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 self-start text-xs font-semibold text-[var(--color-accent)] border border-[var(--color-accent)] rounded-[var(--radius)] px-3 py-1.5 hover:bg-[var(--color-accent)] hover:text-[var(--color-fg-primary)] transition-colors duration-[var(--animate-default)]"
             >
-              Listen on Spotify ↗
+              {release.youtube_video_id ? 'Watch on YouTube ↗' : 'Listen on Spotify ↗'}
             </a>
           )}
         </div>
@@ -208,6 +209,22 @@ export default async function ReleaseDetailPage({
             loading="lazy"
             className="block w-full rounded-[8px] overflow-hidden"
             title={`${release.title} on Spotify`}
+          />
+        </section>
+      )}
+
+      {/* YouTube embed — shown when no Spotify embed is available */}
+      {!hasEmbed && release.youtube_video_id && (
+        <section className="rounded-[8px] overflow-hidden">
+          <iframe
+            src={`https://www.youtube.com/embed/${release.youtube_video_id}`}
+            width="100%"
+            height="380"
+            frameBorder="0"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+            loading="lazy"
+            className="block w-full rounded-[8px] overflow-hidden"
+            title={`${release.title} on YouTube`}
           />
         </section>
       )}
