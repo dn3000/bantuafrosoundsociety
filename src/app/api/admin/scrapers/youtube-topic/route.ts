@@ -25,17 +25,20 @@ export async function POST() {
     const errors: { artist: string; error: string }[] = []
 
     // --- Image backfill pass ---
-    // Tracked artists that have at least one YouTube channel ID but no profile image.
-    // Prefer OAC thumbnail; fall back to Topic thumbnail. Never overwrites an existing image.
+    // Tracked artists that have at least one YouTube channel ID but no usable profile image.
+    // Treats image_url as missing when it is null OR an empty/whitespace string.
+    // Prefer OAC (high-res) thumbnail; fall back to Topic thumbnail. Never overwrites a real image.
     const { data: noImageArtists, error: imgErr } = await supabase
       .from('artists')
-      .select('id, name, youtube_channel_id, youtube_topic_channel_id')
+      .select('id, name, image_url, youtube_channel_id, youtube_topic_channel_id')
       .eq('is_tracked', true)
-      .is('image_url', null)
       .or('youtube_channel_id.not.is.null,youtube_topic_channel_id.not.is.null')
     if (imgErr) return NextResponse.json({ error: imgErr.message }, { status: 500 })
 
     for (const row of noImageArtists ?? []) {
+      // Skip artists that already have a real image (null AND empty/whitespace are treated as missing)
+      if ((row.image_url as string | null)?.trim()) continue
+
       const name = row.name as string
       const oacId = row.youtube_channel_id as string | null
       const topicId = row.youtube_topic_channel_id as string | null
@@ -50,11 +53,13 @@ export async function POST() {
           thumbnail = ch?.thumbnail ?? null
         }
         if (thumbnail) {
+          // Guard: only write if image_url is still null or empty — prevents overwriting a
+          // concurrently-set real image. Covers both null and '' via the OR filter.
           const { error: upErr } = await supabase
             .from('artists')
             .update({ image_url: thumbnail })
             .eq('id', row.id as string)
-            .is('image_url', null) // guard: never overwrite an image set between fetch and update
+            .or('image_url.is.null,image_url.eq.')
           if (!upErr) imagesBackfilled++
           else errors.push({ artist: name, error: `image update: ${upErr.message}` })
         }
@@ -127,7 +132,32 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({ artistsScanned, imagesBackfilled, inserted, duplicates, errors })
+    // --- Artwork upgrade pass ---
+    // Idempotent: find existing youtube-topic submissions that still carry the low-quality
+    // 'mqdefault' thumbnail key and replace it with 'hqdefault' (no API call — hqdefault
+    // always exists for any YouTube video).
+    let artworkUpgraded = 0
+    const { data: staleArtwork, error: artErr } = await supabase
+      .from('submissions')
+      .select('id, artwork_url')
+      .eq('source_method', 'youtube-topic')
+      .ilike('artwork_url', '%mqdefault%')
+    if (artErr) {
+      errors.push({ artist: '(artwork upgrade)', error: artErr.message })
+    } else {
+      for (const sub of staleArtwork ?? []) {
+        const newUrl = (sub.artwork_url as string).replace('mqdefault', 'hqdefault')
+        const { error: upErr } = await supabase
+          .from('submissions')
+          .update({ artwork_url: newUrl })
+          .eq('id', sub.id as string)
+          .ilike('artwork_url', '%mqdefault%') // guard: skip if already upgraded concurrently
+        if (!upErr) artworkUpgraded++
+        else errors.push({ artist: '(artwork upgrade)', error: upErr.message })
+      }
+    }
+
+    return NextResponse.json({ artistsScanned, imagesBackfilled, inserted, duplicates, artworkUpgraded, errors })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'unknown' },

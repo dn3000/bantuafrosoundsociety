@@ -43,6 +43,7 @@ function extractChannel(json: unknown): ChannelResult | null {
           snippet?: {
             title?: string
             thumbnails?: {
+              high?: { url?: string }
               medium?: { url?: string }
               default?: { url?: string }
             }
@@ -54,6 +55,7 @@ function extractChannel(json: unknown): ChannelResult | null {
     const title = item?.snippet?.title ?? null
     const uploadsPlaylistId = item?.contentDetails?.relatedPlaylists?.uploads ?? null
     const thumbnail =
+      item?.snippet?.thumbnails?.high?.url ??
       item?.snippet?.thumbnails?.medium?.url ??
       item?.snippet?.thumbnails?.default?.url ??
       null
@@ -102,13 +104,29 @@ export async function getRecentUploads(
     return items.map((raw) => {
       const item = raw as {
         contentDetails?: { videoId?: string; videoPublishedAt?: string }
-        snippet?: { title?: string; thumbnails?: { medium?: { url?: string } } }
+        snippet?: {
+          title?: string
+          thumbnails?: {
+            maxres?: { url?: string }
+            standard?: { url?: string }
+            high?: { url?: string }
+            medium?: { url?: string }
+            default?: { url?: string }
+          }
+        }
       }
+      const thumbnails = item?.snippet?.thumbnails
       return {
         videoId: item?.contentDetails?.videoId ?? '',
         title: item?.snippet?.title ?? '',
         publishedAt: item?.contentDetails?.videoPublishedAt ?? '',
-        thumbnail: item?.snippet?.thumbnails?.medium?.url ?? null,
+        thumbnail:
+          thumbnails?.maxres?.url ??
+          thumbnails?.standard?.url ??
+          thumbnails?.high?.url ??
+          thumbnails?.medium?.url ??
+          thumbnails?.default?.url ??
+          null,
       }
     })
   } catch {
