@@ -1,9 +1,5 @@
 const BASE = 'https://www.googleapis.com/youtube/v3'
 
-function apiKey(): string | null {
-  return process.env.YOUTUBE_API_KEY ?? null
-}
-
 type ChannelResult = {
   channelId: string
   title: string
@@ -24,13 +20,13 @@ type SearchResult = {
 }
 
 async function fetchYT(url: string): Promise<unknown | null> {
-  const key = apiKey()
+  const key = process.env.YOUTUBE_API_KEY
   if (!key) return null
   try {
     const res = await fetch(`${url}&key=${key}`)
     if (!res.ok) return null
-    const json = await res.json()
-    const items = (json as { items?: unknown[] }).items
+    const json: unknown = await res.json()
+    const items = (json as { items?: unknown[] })?.items
     if (!Array.isArray(items) || items.length === 0) return null
     return json
   } catch {
@@ -40,17 +36,18 @@ async function fetchYT(url: string): Promise<unknown | null> {
 
 function extractChannel(json: unknown): ChannelResult | null {
   try {
-    const items = (json as { items: Record<string, unknown>[] }).items
-    const item = items[0] as {
-      id: string
-      snippet: { title: string }
-      contentDetails: { relatedPlaylists: { uploads: string } }
-    }
-    return {
-      channelId: item.id,
-      title: item.snippet.title,
-      uploadsPlaylistId: item.contentDetails.relatedPlaylists.uploads,
-    }
+    const item = (json as { items?: Array<Record<string, unknown>> })?.items?.[0] as
+      | {
+          id?: string
+          snippet?: { title?: string }
+          contentDetails?: { relatedPlaylists?: { uploads?: string } }
+        }
+      | undefined
+    const channelId = item?.id ?? null
+    const title = item?.snippet?.title ?? null
+    const uploadsPlaylistId = item?.contentDetails?.relatedPlaylists?.uploads ?? null
+    if (!channelId || !title || !uploadsPlaylistId) return null
+    return { channelId, title, uploadsPlaylistId }
   } catch {
     return null
   }
@@ -82,18 +79,17 @@ export async function getRecentUploads(
   )
   if (!json) return []
   try {
-    const items = (json as { items: Record<string, unknown>[] }).items
-    return items.map((item) => {
-      const cd = item.contentDetails as { videoId: string; videoPublishedAt: string }
-      const sn = item.snippet as {
-        title: string
-        thumbnails?: { medium?: { url?: string } }
+    const items = (json as { items?: unknown[] })?.items ?? []
+    return items.map((raw) => {
+      const item = raw as {
+        contentDetails?: { videoId?: string; videoPublishedAt?: string }
+        snippet?: { title?: string; thumbnails?: { medium?: { url?: string } } }
       }
       return {
-        videoId: cd.videoId,
-        title: sn.title,
-        publishedAt: cd.videoPublishedAt,
-        thumbnail: sn.thumbnails?.medium?.url ?? null,
+        videoId: item?.contentDetails?.videoId ?? '',
+        title: item?.snippet?.title ?? '',
+        publishedAt: item?.contentDetails?.videoPublishedAt ?? '',
+        thumbnail: item?.snippet?.thumbnails?.medium?.url ?? null,
       }
     })
   } catch {
@@ -108,13 +104,15 @@ export async function searchChannel(query: string): Promise<SearchResult[]> {
   )
   if (!json) return []
   try {
-    const items = (json as { items: Record<string, unknown>[] }).items
-    return items.map((item) => {
-      const sn = item.snippet as { channelId: string; title: string; description: string }
+    const items = (json as { items?: unknown[] })?.items ?? []
+    return items.map((raw) => {
+      const item = raw as {
+        snippet?: { channelId?: string; title?: string; description?: string }
+      }
       return {
-        channelId: sn.channelId,
-        title: sn.title,
-        description: sn.description,
+        channelId: item?.snippet?.channelId ?? '',
+        title: item?.snippet?.title ?? '',
+        description: item?.snippet?.description ?? '',
       }
     })
   } catch {
