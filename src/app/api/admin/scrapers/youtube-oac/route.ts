@@ -21,6 +21,7 @@ export async function POST() {
     let artistsScanned = 0
     let inserted = 0
     let duplicates = 0
+    let skippedOfficialAudio = 0
     const byCategory = { mix: 0, live_set: 0, music_video: 0, interview: 0, other: 0 }
     const errors: { artist: string; error: string }[] = []
 
@@ -43,6 +44,14 @@ export async function POST() {
         const uploads = await getRecentUploads(playlistId, 25)
         for (const upload of uploads) {
           if (!upload.videoId) continue
+
+          // Skip official audio — these are releases owned by the Topic channel,
+          // not genuine Watch-lane content. Filter before the dedup query to save
+          // a round-trip for every previously-seen official audio.
+          if (/official\s*audio/i.test(upload.title || '')) {
+            skippedOfficialAudio++
+            continue
+          }
 
           // Dedup: skip if this video ID is already in videos
           const { data: existing } = await supabase
@@ -83,7 +92,7 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({ artistsScanned, inserted, duplicates, byCategory, errors })
+    return NextResponse.json({ artistsScanned, inserted, duplicates, skippedOfficialAudio, byCategory, errors })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'unknown' },

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { CardCarousel, type CarouselItem } from '@/components/CardCarousel'
+import { VideoCarousel, type VideoCarouselItem } from '@/components/VideoCarousel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,15 @@ type CuratedPlaylist = {
   curator_name: string | null
   cover_image_url: string | null
   image_url: string | null
+}
+
+type VideoRow = {
+  id: string
+  title: string
+  thumbnail_url: string | null
+  category: string
+  published_at: string | null
+  artists: { name: string } | null
 }
 
 type TrendingArtist = {
@@ -251,7 +261,33 @@ export default async function HomePage() {
     href: `/playlist/${pl.id}`,
   }))
 
-  // 8. Trending Artists — artists with a real avatar, FEATURED first then
+  // 8. Watch: approved videos by category (mix / live_set / music_video), published_at desc
+  const VIDEO_COLS = 'id, title, thumbnail_url, category, published_at, artists(name)'
+  const VIDEO_ORDER = { ascending: false, nullsFirst: false } as const
+
+  const [{ data: mixVideosRaw }, { data: liveSetVideosRaw }, { data: musicVideoVideosRaw }] =
+    await Promise.all([
+      supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'mix').order('published_at', VIDEO_ORDER).limit(12),
+      supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_set').order('published_at', VIDEO_ORDER).limit(12),
+      supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'music_video').order('published_at', VIDEO_ORDER).limit(12),
+    ])
+
+  function toVideoItems(rows: VideoRow[]): VideoCarouselItem[] {
+    return rows.map((v) => ({
+      id: v.id,
+      title: v.title,
+      artist: v.artists?.name ?? null,
+      category: v.category,
+      thumbnail_url: v.thumbnail_url,
+      href: `/watch/${v.id}`,
+    }))
+  }
+
+  const mixItems = toVideoItems((mixVideosRaw ?? []) as unknown as VideoRow[])
+  const liveSetItems = toVideoItems((liveSetVideosRaw ?? []) as unknown as VideoRow[])
+  const musicVideoItems = toVideoItems((musicVideoVideosRaw ?? []) as unknown as VideoRow[])
+
+  // 9. Trending Artists — artists with a real avatar, FEATURED first then
   // ACTIVE, then WATCH, name ASC for ties. PostgREST can't express a CASE
   // ordering directly, so we fetch a bounded pool and sort by tier-priority
   // in JS before slicing the top 18.
@@ -314,6 +350,9 @@ export default async function HomePage() {
     newAlbumItems.length > 0 ||
     newReleaseItems.length > 0 ||
     playlistItems.length > 0 ||
+    mixItems.length > 0 ||
+    liveSetItems.length > 0 ||
+    musicVideoItems.length > 0 ||
     recent.length > 0
 
   return (
@@ -399,6 +438,11 @@ export default async function HomePage() {
 
       {/* ── NEW RELEASES CAROUSEL ────────────────────────────────────────── */}
       <CardCarousel title="New Releases" items={newReleaseItems} rows={2} className="mb-14" />
+
+      {/* ── WATCH: VIDEO CAROUSELS ───────────────────────────────────────── */}
+      <VideoCarousel title="Mixes" items={mixItems} className="mb-14" />
+      <VideoCarousel title="Live Sets" items={liveSetItems} className="mb-14" />
+      <VideoCarousel title="Music Videos" items={musicVideoItems} className="mb-14" />
 
       {/* ── LATEST APPROVED ──────────────────────────────────────────────── */}
       {recent.length > 0 && (

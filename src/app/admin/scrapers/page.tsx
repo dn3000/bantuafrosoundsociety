@@ -182,6 +182,7 @@ export default function ScrapersPage() {
     artistsScanned: number
     inserted: number
     duplicates: number
+    skippedOfficialAudio: number
     byCategory: { mix: number; live_set: number; music_video: number; interview: number; other: number }
     errors: { artist: string; error: string }[]
   } | null>(null)
@@ -522,6 +523,7 @@ export default function ScrapersPage() {
         artistsScanned: typeof data.artistsScanned === 'number' ? data.artistsScanned : 0,
         inserted: typeof data.inserted === 'number' ? data.inserted : 0,
         duplicates: typeof data.duplicates === 'number' ? data.duplicates : 0,
+        skippedOfficialAudio: typeof data.skippedOfficialAudio === 'number' ? data.skippedOfficialAudio : 0,
         byCategory: data.byCategory ?? { mix: 0, live_set: 0, music_video: 0, interview: 0, other: 0 },
         errors: Array.isArray(data.errors) ? data.errors : [],
       })
@@ -880,10 +882,11 @@ export default function ScrapersPage() {
 
           {oacPhase === 'done' && oacResult && (
             <div className="mt-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs mb-3">
                 <Metric label="Artists scanned" value={oacResult.artistsScanned} />
                 <Metric label="Inserted" value={oacResult.inserted} accent />
                 <Metric label="Duplicates" value={oacResult.duplicates} />
+                <Metric label="Skipped audio" value={oacResult.skippedOfficialAudio} />
                 <Metric label="Errors" value={oacResult.errors.length} error={oacResult.errors.length > 0} />
               </div>
               {oacResult.inserted > 0 && (
