@@ -234,6 +234,7 @@ export async function resolveChannelByInput(input: string): Promise<ResolveResul
 //   "Alive"                      → other   (\blive\b needs boundary before l; not present in "alive")
 //   "For You Vol.21 Mixed By X"  → mix     (\bvol\b\.? + mixed by)
 //   "Boiler Room: Artist"        → live_set
+//   "Song (Lyric Video)"         → other   (lyric video intentionally excluded from music_video)
 export function categorizeVideo(
   title: string,
 ): 'mix' | 'live_set' | 'music_video' | 'interview' | 'other' {
@@ -264,8 +265,7 @@ export function categorizeVideo(
     is(/official music video/) ||
     is(/official video/) ||
     is(/music video/) ||
-    is(/\bvisualizer\b/) ||
-    is(/lyric video/)
+    is(/\bvisualizer\b/)
   ) return 'music_video'
 
   // \bmix(?:ed|tape)?\b won't match "remix" — no word boundary before m in "re-mix"
