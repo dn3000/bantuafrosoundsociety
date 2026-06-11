@@ -225,6 +225,37 @@ export async function resolveChannelByInput(input: string): Promise<ResolveResul
   }
 }
 
+// Title-based category heuristic for YouTube videos. First category whose
+// keyword list has a match wins; comparison is case-insensitive.
+export function categorizeVideo(
+  title: string,
+): 'mix' | 'live_set' | 'music_video' | 'interview' | 'other' {
+  const t = title.toLowerCase()
+  const has = (term: string) => t.includes(term)
+
+  if (
+    has('interview') || has('in conversation') || has('q&a') ||
+    has('documentary') || has('behind the scenes') || has('bts')
+  ) return 'interview'
+
+  if (
+    has('live') || has('boiler room') || has('festival') || has('live at') ||
+    has('performance') || has('concert') || has('@')
+  ) return 'live_set'
+
+  if (
+    has('official video') || has('official music video') || has('music video') ||
+    has('visualizer') || has('lyric video') || has('official audio')
+  ) return 'music_video'
+
+  if (
+    has('mix') || has('mixed by') || has('set') || has('session') ||
+    has('episode') || has('podcast') || has('vol') || has('guest mix')
+  ) return 'mix'
+
+  return 'other'
+}
+
 // Costs ~2 search quota units (100 units each).
 // Defensive: never throws, returns nulls for any failed arm.
 export async function suggestChannels(name: string): Promise<SuggestResult> {

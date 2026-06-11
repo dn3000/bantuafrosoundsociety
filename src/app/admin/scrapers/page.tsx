@@ -176,6 +176,17 @@ export default function ScrapersPage() {
   } | null>(null)
   const [ytError, setYtError] = useState<string | null>(null)
 
+  // YouTube OAC video ingestion (one-shot, no cursor)
+  const [oacPhase, setOacPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [oacResult, setOacResult] = useState<{
+    artistsScanned: number
+    inserted: number
+    duplicates: number
+    byCategory: { mix: number; live_set: number; music_video: number; interview: number; other: number }
+    errors: { artist: string; error: string }[]
+  } | null>(null)
+  const [oacError, setOacError] = useState<string | null>(null)
+
   // stopRef short-circuits the async loop; abortRef cancels the in-flight chunk.
   const stopRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -499,6 +510,28 @@ export default function ScrapersPage() {
     }
   }
 
+  async function runYouTubeOAC() {
+    setOacPhase('running')
+    setOacResult(null)
+    setOacError(null)
+    try {
+      const res = await fetch('/api/admin/scrapers/youtube-oac', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
+      setOacResult({
+        artistsScanned: typeof data.artistsScanned === 'number' ? data.artistsScanned : 0,
+        inserted: typeof data.inserted === 'number' ? data.inserted : 0,
+        duplicates: typeof data.duplicates === 'number' ? data.duplicates : 0,
+        byCategory: data.byCategory ?? { mix: 0, live_set: 0, music_video: 0, interview: 0, other: 0 },
+        errors: Array.isArray(data.errors) ? data.errors : [],
+      })
+      setOacPhase('done')
+    } catch (err) {
+      setOacError(errMsg(err))
+      setOacPhase('error')
+    }
+  }
+
   async function runYouTubeTopic() {
     setYtPhase('running')
     setYtResult(null)
@@ -816,6 +849,61 @@ export default function ScrapersPage() {
 
           {ytError && (
             <p className="mt-3 text-sm text-[var(--color-error)]">{ytError}</p>
+          )}
+        </div>
+
+        {/* YouTube OAC video ingestion */}
+        <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-[var(--color-fg-primary)]">YouTube videos (OAC)</h2>
+            <Link
+              href="/admin/videos"
+              className="text-xs text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] transition-colors"
+            >
+              Review queue →
+            </Link>
+          </div>
+          <p className="text-sm text-[var(--color-fg-secondary)] mb-4">
+            Fetches recent uploads from each tracked artist&apos;s Official Artist Channel and adds
+            them to the <strong>Watch review queue as pending videos</strong> — no auto-publish.
+            Category is suggested from the title and is editable per-item during review.
+            Safe to re-run (dedup by video ID).
+          </p>
+          <button
+            type="button"
+            onClick={runYouTubeOAC}
+            disabled={running || oacPhase === 'running'}
+            className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-50"
+          >
+            {oacPhase === 'running' ? 'Ingesting…' : 'Ingest YouTube videos (OAC)'}
+          </button>
+
+          {oacPhase === 'done' && oacResult && (
+            <div className="mt-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-3">
+                <Metric label="Artists scanned" value={oacResult.artistsScanned} />
+                <Metric label="Inserted" value={oacResult.inserted} accent />
+                <Metric label="Duplicates" value={oacResult.duplicates} />
+                <Metric label="Errors" value={oacResult.errors.length} error={oacResult.errors.length > 0} />
+              </div>
+              {oacResult.inserted > 0 && (
+                <div className="text-xs font-mono text-[var(--color-fg-secondary)] bg-[var(--color-bg-base)] rounded-[var(--radius-sm)] px-3 py-2">
+                  <span className="text-[var(--color-fg-tertiary)]">by category — </span>
+                  mix: {oacResult.byCategory.mix} · live set: {oacResult.byCategory.live_set} · music video: {oacResult.byCategory.music_video} · interview: {oacResult.byCategory.interview} · other: {oacResult.byCategory.other}
+                </div>
+              )}
+              {oacResult.errors.length > 0 && (
+                <NoteList
+                  title={`Errors (${oacResult.errors.length})`}
+                  notes={oacResult.errors}
+                  tone="error"
+                />
+              )}
+            </div>
+          )}
+
+          {oacError && (
+            <p className="mt-3 text-sm text-[var(--color-error)]">{oacError}</p>
           )}
         </div>
 
