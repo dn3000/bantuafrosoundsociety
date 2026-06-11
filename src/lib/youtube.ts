@@ -226,31 +226,58 @@ export async function resolveChannelByInput(input: string): Promise<ResolveResul
 }
 
 // Title-based category heuristic for YouTube videos. First category whose
-// keyword list has a match wins; comparison is case-insensitive.
+// pattern list has a match wins; comparison is case-insensitive.
+//
+// Sanity checks (all must pass):
+//   "Song (Black Coffee Remix)"  → other   (\bmix\b won't fire; m in "remix" follows word-char 'e')
+//   "Sunset Vibes"               → other
+//   "Alive"                      → other   (\blive\b needs boundary before l; not present in "alive")
+//   "For You Vol.21 Mixed By X"  → mix     (\bvol\b\.? + mixed by)
+//   "Boiler Room: Artist"        → live_set
 export function categorizeVideo(
   title: string,
 ): 'mix' | 'live_set' | 'music_video' | 'interview' | 'other' {
   const t = title.toLowerCase()
-  const has = (term: string) => t.includes(term)
+  const is = (re: RegExp) => re.test(t)
 
   if (
-    has('interview') || has('in conversation') || has('q&a') ||
-    has('documentary') || has('behind the scenes') || has('bts')
+    is(/\binterview\b/) ||
+    is(/in conversation/) ||
+    is(/\bq&a\b/) ||
+    is(/\bdocumentary\b/) ||
+    is(/behind the scenes/) ||
+    is(/\bbts\b/)
   ) return 'interview'
 
+  // \s@ matches "DJ @ Venue" without firing on every bare @handle in a description
   if (
-    has('live') || has('boiler room') || has('festival') || has('live at') ||
-    has('performance') || has('concert') || has('@')
+    is(/\blive\b/) ||
+    is(/boiler room/) ||
+    is(/\bfestival\b/) ||
+    is(/live at/) ||
+    is(/\bperformance\b/) ||
+    is(/\bconcert\b/) ||
+    is(/\s@/)
   ) return 'live_set'
 
   if (
-    has('official video') || has('official music video') || has('music video') ||
-    has('visualizer') || has('lyric video') || has('official audio')
+    is(/official music video/) ||
+    is(/official video/) ||
+    is(/music video/) ||
+    is(/\bvisualizer\b/) ||
+    is(/lyric video/)
   ) return 'music_video'
 
+  // \bmix(?:ed|tape)?\b won't match "remix" — no word boundary before m in "re-mix"
   if (
-    has('mix') || has('mixed by') || has('set') || has('session') ||
-    has('episode') || has('podcast') || has('vol') || has('guest mix')
+    is(/\bmix(?:ed|tape)?\b/) ||
+    is(/mixed by/) ||
+    is(/\bset\b/) ||
+    is(/\bsession\b/) ||
+    is(/\bepisode\b/) ||
+    is(/\bpodcast\b/) ||
+    is(/\bvol\b\.?/) ||
+    is(/guest mix/)
   ) return 'mix'
 
   return 'other'

@@ -188,6 +188,15 @@ export default function ScrapersPage() {
   } | null>(null)
   const [oacError, setOacError] = useState<string | null>(null)
 
+  // Bulk re-categorize pending videos (one-shot)
+  const [rcPhase, setRcPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [rcResult, setRcResult] = useState<{
+    scanned: number
+    changed: number
+    byCategory: { mix: number; live_set: number; music_video: number; interview: number; other: number }
+  } | null>(null)
+  const [rcError, setRcError] = useState<string | null>(null)
+
   // stopRef short-circuits the async loop; abortRef cancels the in-flight chunk.
   const stopRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -531,6 +540,26 @@ export default function ScrapersPage() {
     } catch (err) {
       setOacError(errMsg(err))
       setOacPhase('error')
+    }
+  }
+
+  async function runRecategorize() {
+    setRcPhase('running')
+    setRcResult(null)
+    setRcError(null)
+    try {
+      const res = await fetch('/api/admin/scrapers/youtube-recategorize', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
+      setRcResult({
+        scanned: typeof data.scanned === 'number' ? data.scanned : 0,
+        changed: typeof data.changed === 'number' ? data.changed : 0,
+        byCategory: data.byCategory ?? { mix: 0, live_set: 0, music_video: 0, interview: 0, other: 0 },
+      })
+      setRcPhase('done')
+    } catch (err) {
+      setRcError(errMsg(err))
+      setRcPhase('error')
     }
   }
 
@@ -907,6 +936,42 @@ export default function ScrapersPage() {
 
           {oacError && (
             <p className="mt-3 text-sm text-[var(--color-error)]">{oacError}</p>
+          )}
+        </div>
+
+        {/* Bulk re-categorize pending videos */}
+        <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
+          <h2 className="text-sm font-semibold text-[var(--color-fg-primary)] mb-2">Re-categorize pending videos</h2>
+          <p className="text-sm text-[var(--color-fg-secondary)] mb-4">
+            Re-runs the title categorizer over every <strong>pending</strong> video and updates rows
+            whose category changed. Only touches videos with status <code className="text-xs">pending</code> —
+            approved and rejected rows are never modified.
+          </p>
+          <button
+            type="button"
+            onClick={runRecategorize}
+            disabled={running || rcPhase === 'running'}
+            className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-50"
+          >
+            {rcPhase === 'running' ? 'Re-categorizing…' : 'Re-categorize pending videos'}
+          </button>
+
+          {rcPhase === 'done' && rcResult && (
+            <div className="mt-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs mb-3">
+                <Metric label="Scanned" value={rcResult.scanned} />
+                <Metric label="Updated" value={rcResult.changed} accent />
+                <Metric label="Unchanged" value={rcResult.scanned - rcResult.changed} />
+              </div>
+              <div className="text-xs font-mono text-[var(--color-fg-secondary)] bg-[var(--color-bg-base)] rounded-[var(--radius-sm)] px-3 py-2">
+                <span className="text-[var(--color-fg-tertiary)]">new distribution — </span>
+                mix: {rcResult.byCategory.mix} · live set: {rcResult.byCategory.live_set} · music video: {rcResult.byCategory.music_video} · interview: {rcResult.byCategory.interview} · other: {rcResult.byCategory.other}
+              </div>
+            </div>
+          )}
+
+          {rcError && (
+            <p className="mt-3 text-sm text-[var(--color-error)]">{rcError}</p>
           )}
         </div>
 
