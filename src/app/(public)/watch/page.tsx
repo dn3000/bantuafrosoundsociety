@@ -24,13 +24,14 @@ type VideoRow = {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 // Display order for category sections.
-const CATEGORY_ORDER = ['music_video', 'mix', 'live_set', 'interview', 'other'] as const
+const CATEGORY_ORDER = ['music_video', 'mix', 'live_set', 'live_show', 'interview', 'other'] as const
 type WatchCategory = (typeof CATEGORY_ORDER)[number]
 
 const SECTION_LABELS: Record<WatchCategory, string> = {
   music_video: 'Music Videos',
   mix: 'Mixes',
   live_set: 'Live Sets',
+  live_show: 'Live Shows',
   interview: 'Interviews',
   other: 'Other',
 }
@@ -57,10 +58,11 @@ export default async function WatchPage() {
   const ORDER_OPTS = { ascending: false, nullsFirst: false } as const
 
   // Parallel queries — one per category, limit 24 each.
-  const [musicVideosR, mixesR, liveSetsR, interviewsR, otherR] = await Promise.all([
+  const [musicVideosR, mixesR, liveSetsR, liveShowsR, interviewsR, otherR] = await Promise.all([
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'music_video').order('published_at', ORDER_OPTS).limit(24),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'mix').order('published_at', ORDER_OPTS).limit(24),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_set').order('published_at', ORDER_OPTS).limit(24),
+    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_show').order('published_at', ORDER_OPTS).limit(24),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'interview').order('published_at', ORDER_OPTS).limit(24),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'other').order('published_at', ORDER_OPTS).limit(24),
   ])
@@ -69,6 +71,7 @@ export default async function WatchPage() {
     music_video: toItems((musicVideosR.data ?? []) as unknown as VideoRow[]),
     mix: toItems((mixesR.data ?? []) as unknown as VideoRow[]),
     live_set: toItems((liveSetsR.data ?? []) as unknown as VideoRow[]),
+    live_show: toItems((liveShowsR.data ?? []) as unknown as VideoRow[]),
     interview: toItems((interviewsR.data ?? []) as unknown as VideoRow[]),
     other: toItems((otherR.data ?? []) as unknown as VideoRow[]),
   }

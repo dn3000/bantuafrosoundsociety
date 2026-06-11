@@ -23,10 +23,11 @@ type Video = {
   } | null
 }
 
-const CATEGORIES = ['mix', 'live_set', 'music_video', 'interview', 'other'] as const
+const CATEGORIES = ['mix', 'live_set', 'live_show', 'music_video', 'interview', 'other'] as const
 const CATEGORY_LABELS: Record<string, string> = {
   mix: 'Mix',
   live_set: 'Live Set',
+  live_show: 'Live Show',
   music_video: 'Music Video',
   interview: 'Interview',
   other: 'Other',

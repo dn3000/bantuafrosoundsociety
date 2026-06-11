@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 const ALLOWED_STATUSES = ['pending', 'approved', 'rejected'] as const
-const ALLOWED_CATEGORIES = ['mix', 'live_set', 'music_video', 'interview', 'other'] as const
+const ALLOWED_CATEGORIES = ['mix', 'live_set', 'live_show', 'music_video', 'interview', 'other'] as const
 
 export async function PATCH(
   request: Request,

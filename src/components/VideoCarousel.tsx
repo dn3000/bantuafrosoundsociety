@@ -19,6 +19,7 @@ export type VideoCarouselItem = {
 const CATEGORY_LABELS: Record<string, string> = {
   mix: 'Mix',
   live_set: 'Live Set',
+  live_show: 'Live Show',
   music_video: 'Music Video',
   interview: 'Interview',
   other: 'Other',
