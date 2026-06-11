@@ -197,6 +197,25 @@ export default function ScrapersPage() {
   } | null>(null)
   const [rcError, setRcError] = useState<string | null>(null)
 
+  // Wikidata OAC channel resolution (one-shot, free, no quota)
+  const [wdPhase, setWdPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [wdResult, setWdResult] = useState<{
+    checked: number
+    resolved: number
+    stillUnresolved: number
+  } | null>(null)
+  const [wdError, setWdError] = useState<string | null>(null)
+
+  // YouTube Topic channel resolution (one-shot, quota-capped at 80 searches/run)
+  const [trPhase, setTrPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [trResult, setTrResult] = useState<{
+    checked: number
+    resolved: number
+    searchesUsed: number
+    remainingUnresolved: number
+  } | null>(null)
+  const [trError, setTrError] = useState<string | null>(null)
+
   // stopRef short-circuits the async loop; abortRef cancels the in-flight chunk.
   const stopRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -585,6 +604,47 @@ export default function ScrapersPage() {
     }
   }
 
+  async function runWikidataResolve() {
+    setWdPhase('running')
+    setWdResult(null)
+    setWdError(null)
+    try {
+      const res = await fetch('/api/admin/scrapers/wikidata-resolve', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
+      setWdResult({
+        checked: typeof data.checked === 'number' ? data.checked : 0,
+        resolved: typeof data.resolved === 'number' ? data.resolved : 0,
+        stillUnresolved: typeof data.stillUnresolved === 'number' ? data.stillUnresolved : 0,
+      })
+      setWdPhase('done')
+    } catch (err) {
+      setWdError(errMsg(err))
+      setWdPhase('error')
+    }
+  }
+
+  async function runTopicResolve() {
+    setTrPhase('running')
+    setTrResult(null)
+    setTrError(null)
+    try {
+      const res = await fetch('/api/admin/scrapers/youtube-topic-resolve', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
+      setTrResult({
+        checked: typeof data.checked === 'number' ? data.checked : 0,
+        resolved: typeof data.resolved === 'number' ? data.resolved : 0,
+        searchesUsed: typeof data.searchesUsed === 'number' ? data.searchesUsed : 0,
+        remainingUnresolved: typeof data.remainingUnresolved === 'number' ? data.remainingUnresolved : 0,
+      })
+      setTrPhase('done')
+    } catch (err) {
+      setTrError(errMsg(err))
+      setTrPhase('error')
+    }
+  }
+
   // Progress denominator + percentage: artist scan counts artists, playlist scan
   // counts playlists; backfill has no fixed total.
   const denom = runMode === 'playlist' ? totalPlaylists : totalWhitelist
@@ -839,6 +899,73 @@ export default function ScrapersPage() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Resolve OAC channels via Wikidata */}
+        <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
+          <h2 className="text-sm font-semibold text-[var(--color-fg-primary)] mb-2">Resolve OAC channels via Wikidata</h2>
+          <p className="text-sm text-[var(--color-fg-secondary)] mb-4">
+            Looks up each artist&apos;s Official Artist Channel using their Spotify ID against the
+            Wikidata knowledge graph (P1902 → P2397).{' '}
+            <strong>Free and unlimited — no API quota consumed.</strong> Only artists that have a
+            Spotify ID but no OAC channel set are checked. Re-running is safe and idempotent.
+          </p>
+          <button
+            type="button"
+            onClick={runWikidataResolve}
+            disabled={running || wdPhase === 'running'}
+            className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-50"
+          >
+            {wdPhase === 'running' ? 'Resolving…' : 'Resolve OAC channels via Wikidata (free)'}
+          </button>
+
+          {wdPhase === 'done' && wdResult && (
+            <div className="mt-4">
+              <div className="grid grid-cols-3 gap-3 text-xs">
+                <Metric label="Checked" value={wdResult.checked} />
+                <Metric label="Resolved" value={wdResult.resolved} accent />
+                <Metric label="Still unresolved" value={wdResult.stillUnresolved} />
+              </div>
+            </div>
+          )}
+
+          {wdError && (
+            <p className="mt-3 text-sm text-[var(--color-error)]">{wdError}</p>
+          )}
+        </div>
+
+        {/* Resolve Topic channels via YouTube search */}
+        <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
+          <h2 className="text-sm font-semibold text-[var(--color-fg-primary)] mb-2">Resolve Topic channels via YouTube search</h2>
+          <p className="text-sm text-[var(--color-fg-secondary)] mb-4">
+            Searches YouTube for each artist&apos;s auto-generated &quot; - Topic&quot; channel and
+            saves its ID.{' '}
+            <strong>Quota-capped at 80 searches per run</strong> (100 units each, ~10k daily limit).
+            Re-run daily until all artists are resolved — tracked artists are prioritised first.
+          </p>
+          <button
+            type="button"
+            onClick={runTopicResolve}
+            disabled={running || trPhase === 'running'}
+            className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-50"
+          >
+            {trPhase === 'running' ? 'Resolving…' : 'Resolve Topic channels via YouTube search (≤80/run)'}
+          </button>
+
+          {trPhase === 'done' && trResult && (
+            <div className="mt-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <Metric label="Checked" value={trResult.checked} />
+                <Metric label="Resolved" value={trResult.resolved} accent />
+                <Metric label="Searches used" value={trResult.searchesUsed} />
+                <Metric label="Still unresolved" value={trResult.remainingUnresolved} />
+              </div>
+            </div>
+          )}
+
+          {trError && (
+            <p className="mt-3 text-sm text-[var(--color-error)]">{trError}</p>
+          )}
         </div>
 
         {/* YouTube Topic channel releases */}
