@@ -22,16 +22,28 @@ type SubmissionInfo = {
   artists: ArtistInfo | null
 }
 
+type ArticleInfo = {
+  id: string
+  title: string
+  slug: string
+  cover_image_url: string | null
+  author: string
+  dek: string | null
+}
+
 type Assignment = {
   id: string
   slot_id: string
-  submission_id: string
+  submission_id: string | null
+  article_id: string | null
+  ref_type: 'submission' | 'article'
   start_at: string
   end_at: string | null
   who_assigned: string | null
   assigned_at: string
   created_at: string
   submissions: SubmissionInfo | null
+  article: ArticleInfo | null
 }
 
 type Slot = {
@@ -41,6 +53,7 @@ type Slot = {
   description: string | null
   position: number
   is_active: boolean
+  content_type: 'submission' | 'article'
 }
 
 type SubmissionOption = {
@@ -50,6 +63,15 @@ type SubmissionOption = {
   artwork_url: string | null
   cover_image_url: string | null
   artists: { name: string; image_url: string | null } | null
+}
+
+type ArticleOption = {
+  id: string
+  title: string
+  slug: string
+  cover_image_url: string | null
+  author: string
+  dek: string | null
 }
 
 type AssignmentStatus = 'live' | 'scheduled' | 'past'
@@ -110,31 +132,33 @@ const inputCls =
   'w-full bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-3 py-2 text-sm text-[var(--color-fg-primary)] placeholder:text-[var(--color-fg-tertiary)] focus:border-[var(--color-border-strong)] focus:outline-none transition-colors'
 
 function Thumbnail({
-  submission,
+  artwork_url,
+  cover_image_url,
+  artist_image_url,
+  title,
   size = 'sm',
 }: {
-  submission: SubmissionInfo | SubmissionOption | null
+  artwork_url?: string | null
+  cover_image_url?: string | null
+  artist_image_url?: string | null
+  title?: string | null
   size?: 'sm' | 'md'
 }) {
   const dim = size === 'md' ? 'w-12 h-12' : 'w-10 h-10'
-  const src = pickImageSrc(
-    submission?.artwork_url,
-    submission?.cover_image_url,
-    submission?.artists?.image_url,
-  )
+  const src = pickImageSrc(artwork_url, cover_image_url, artist_image_url)
   if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
-        alt={submission?.title ?? ''}
+        alt={title ?? ''}
         className={`${dim} rounded-[var(--radius)] object-cover flex-shrink-0`}
         loading="lazy"
       />
     )
   }
-  const initials = submission?.title
-    ? submission.title.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+  const initials = title
+    ? title.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
     : '♪'
   return (
     <div className={`${dim} rounded-[var(--radius)] bg-[var(--color-bg-higher)] flex items-center justify-center text-xs font-semibold text-[var(--color-fg-secondary)] flex-shrink-0`}>
@@ -172,18 +196,29 @@ function AssignmentRow({
 }) {
   const status = getStatus(assignment, now)
   const sub = assignment.submissions
+  const art = assignment.article
+
+  const displayTitle = assignment.ref_type === 'article' ? (art?.title ?? '—') : (sub?.title ?? '—')
+  const displaySubtitle = assignment.ref_type === 'article' ? (art?.author ?? 'BASS') : (sub?.artists?.name ?? 'Unknown artist')
+
   return (
     <div className="flex items-start gap-3 p-3 bg-[var(--color-bg-higher)] rounded-[var(--radius)]">
-      <Thumbnail submission={sub} size="md" />
+      <Thumbnail
+        artwork_url={assignment.ref_type === 'submission' ? sub?.artwork_url : null}
+        cover_image_url={assignment.ref_type === 'article' ? art?.cover_image_url : sub?.cover_image_url}
+        artist_image_url={assignment.ref_type === 'submission' ? sub?.artists?.image_url : null}
+        title={displayTitle}
+        size="md"
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-0.5">
           <span className="font-semibold text-sm text-[var(--color-fg-primary)] truncate">
-            {sub?.title ?? '—'}
+            {displayTitle}
           </span>
           <StatusBadge status={status} />
         </div>
         <p className="text-xs text-[var(--color-fg-secondary)] truncate">
-          {sub?.artists?.name ?? 'Unknown artist'}
+          {displaySubtitle}
         </p>
         <p className="text-[10px] text-[var(--color-fg-tertiary)] mt-0.5">
           {formatWindow(assignment.start_at, assignment.end_at)}
@@ -344,6 +379,139 @@ function SubmissionPicker({
   )
 }
 
+function ArticlePicker({
+  value,
+  onChange,
+}: {
+  value: ArticleOption | null
+  onChange: (a: ArticleOption | null) => void
+}) {
+  const [search, setSearch] = useState('')
+  const [results, setResults] = useState<ArticleOption[]>([])
+  const [searching, setSearching] = useState(false)
+
+  const fetchResults = useCallback(async () => {
+    if (search.length < 2) { setResults([]); return }
+    setSearching(true)
+    try {
+      const params = new URLSearchParams({ status: 'published', search, limit: '20' })
+      const res = await fetch(`/api/admin/articles?${params}`)
+      const data = await res.json()
+      if (res.ok) {
+        setResults(
+          (data.articles ?? []).map((a: {
+            id: string
+            title: string
+            slug: string
+            cover_image_url: string | null
+            author: string
+            dek: string | null
+          }) => ({
+            id: a.id,
+            title: a.title,
+            slug: a.slug,
+            cover_image_url: a.cover_image_url,
+            author: a.author,
+            dek: a.dek,
+          }))
+        )
+      }
+    } finally {
+      setSearching(false)
+    }
+  }, [search])
+
+  useEffect(() => {
+    const t = setTimeout(fetchResults, 200)
+    return () => clearTimeout(t)
+  }, [fetchResults])
+
+  if (value) {
+    return (
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          {isRenderableImage(value.cover_image_url) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={value.cover_image_url!}
+              alt={value.title}
+              className="w-10 h-10 rounded-[var(--radius)] object-cover"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-[var(--radius)] bg-[var(--color-bg-higher)] flex items-center justify-center text-xs font-semibold text-[var(--color-fg-secondary)]">
+              {value.title[0]?.toUpperCase() ?? '♪'}
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-semibold text-[var(--color-fg-primary)]">{value.title}</p>
+            <p className="text-xs text-[var(--color-fg-secondary)]">
+              {value.author} · article
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => { onChange(null); setSearch('') }}
+          className="text-xs text-[var(--color-fg-tertiary)] hover:text-[var(--color-fg-primary)] transition-colors flex-shrink-0"
+        >
+          Change
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search published articles…"
+        className={inputCls}
+        autoFocus
+      />
+      {searching && (
+        <p className="text-xs text-[var(--color-fg-tertiary)] mt-1.5">Searching…</p>
+      )}
+      {results.length > 0 && (
+        <ul className="mt-2 space-y-0.5 max-h-60 overflow-y-auto border border-[var(--color-border-default)] rounded-[var(--radius)] bg-[var(--color-bg-input)]">
+          {results.map((a) => (
+            <li key={a.id}>
+              <button
+                type="button"
+                onClick={() => { onChange(a); setSearch(''); setResults([]) }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[var(--color-bg-higher)] transition-colors text-left"
+              >
+                {isRenderableImage(a.cover_image_url) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={a.cover_image_url!}
+                    alt={a.title}
+                    className="w-8 h-8 rounded-[var(--radius)] object-cover flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-[var(--radius)] bg-[var(--color-bg-higher)] flex items-center justify-center text-xs font-semibold text-[var(--color-fg-secondary)] flex-shrink-0">
+                    {a.title[0]?.toUpperCase() ?? '♪'}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm text-[var(--color-fg-primary)] truncate">{a.title}</p>
+                  <p className="text-xs text-[var(--color-fg-secondary)]">
+                    {a.author} · article
+                  </p>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {search.length >= 2 && !searching && results.length === 0 && (
+        <p className="text-xs text-[var(--color-fg-tertiary)] mt-1.5">No published articles found.</p>
+      )}
+    </>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SlotManagePage() {
@@ -358,6 +526,7 @@ export default function SlotManagePage() {
   const [showForm, setShowForm] = useState(false)
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null)
   const [selectedSubmission, setSelectedSubmission] = useState<SubmissionOption | null>(null)
+  const [selectedArticle, setSelectedArticle] = useState<ArticleOption | null>(null)
   const [startAt, setStartAt] = useState(nowLocalDatetime())
   const [endAt, setEndAt] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
@@ -401,6 +570,7 @@ export default function SlotManagePage() {
   function openAdd() {
     setEditingAssignment(null)
     setSelectedSubmission(null)
+    setSelectedArticle(null)
     setStartAt(nowLocalDatetime())
     setEndAt('')
     setFormError(null)
@@ -409,18 +579,31 @@ export default function SlotManagePage() {
 
   function openEdit(a: Assignment) {
     setEditingAssignment(a)
-    setSelectedSubmission(
-      a.submissions
-        ? {
-            id: a.submissions.id,
-            title: a.submissions.title,
-            type: a.submissions.type,
-            artwork_url: a.submissions.artwork_url,
-            cover_image_url: a.submissions.cover_image_url,
-            artists: a.submissions.artists,
-          }
-        : null
-    )
+    if (a.ref_type === 'article' && a.article) {
+      setSelectedArticle({
+        id: a.article.id,
+        title: a.article.title,
+        slug: a.article.slug,
+        cover_image_url: a.article.cover_image_url,
+        author: a.article.author,
+        dek: a.article.dek,
+      })
+      setSelectedSubmission(null)
+    } else {
+      setSelectedSubmission(
+        a.submissions
+          ? {
+              id: a.submissions.id,
+              title: a.submissions.title,
+              type: a.submissions.type,
+              artwork_url: a.submissions.artwork_url,
+              cover_image_url: a.submissions.cover_image_url,
+              artists: a.submissions.artists,
+            }
+          : null
+      )
+      setSelectedArticle(null)
+    }
     setStartAt(toLocalDatetimeInput(a.start_at))
     setEndAt(a.end_at ? toLocalDatetimeInput(a.end_at) : '')
     setFormError(null)
@@ -434,7 +617,16 @@ export default function SlotManagePage() {
   }
 
   async function handleSave() {
-    if (!selectedSubmission) { setFormError('Please select a submission'); return }
+    const isArticleSlot = slot?.content_type === 'article'
+
+    if (isArticleSlot && !selectedArticle) {
+      setFormError('Please select an article')
+      return
+    }
+    if (!isArticleSlot && !selectedSubmission) {
+      setFormError('Please select a submission')
+      return
+    }
     if (!startAt) { setFormError('Start time is required'); return }
 
     setFormError(null)
@@ -444,13 +636,17 @@ export default function SlotManagePage() {
       const endUtc = endAt ? new Date(endAt).toISOString() : null
       const isEdit = editingAssignment !== null
 
+      const contentRef = isArticleSlot
+        ? { article_id: selectedArticle!.id }
+        : { submission_id: selectedSubmission!.id }
+
       const url = isEdit
         ? `/api/admin/editorial/assignments/${editingAssignment!.id}`
         : '/api/admin/editorial/assignments'
       const method = isEdit ? 'PATCH' : 'POST'
       const body = isEdit
-        ? { submission_id: selectedSubmission.id, start_at: startUtc, end_at: endUtc }
-        : { slot_key: slotKey, submission_id: selectedSubmission.id, start_at: startUtc, end_at: endUtc }
+        ? { ...contentRef, start_at: startUtc, end_at: endUtc }
+        : { slot_key: slotKey, ...contentRef, start_at: startUtc, end_at: endUtc }
 
       const res = await fetch(url, {
         method,
@@ -479,7 +675,9 @@ export default function SlotManagePage() {
   }
 
   async function handleRemove(assignment: Assignment) {
-    const label = assignment.submissions?.title ?? 'this assignment'
+    const label = assignment.ref_type === 'article'
+      ? (assignment.article?.title ?? 'this assignment')
+      : (assignment.submissions?.title ?? 'this assignment')
     if (!window.confirm(`Remove "${label}" from this slot?`)) return
     try {
       const res = await fetch(`/api/admin/editorial/assignments/${assignment.id}`, { method: 'DELETE' })
@@ -505,6 +703,8 @@ export default function SlotManagePage() {
     .filter((a) => getStatus(a, now) === 'past')
     .sort((a, b) => b.start_at.localeCompare(a.start_at))
 
+  const isArticleSlot = slot?.content_type === 'article'
+
   return (
     <div className="min-h-screen bg-[var(--color-bg-base)] p-6 sm:p-10">
       {/* Toast */}
@@ -528,9 +728,13 @@ export default function SlotManagePage() {
             <div className="space-y-5">
               <div>
                 <p className="text-xs text-[var(--color-fg-tertiary)] uppercase tracking-wider mb-2">
-                  Submission *
+                  {isArticleSlot ? 'Article *' : 'Submission *'}
                 </p>
-                <SubmissionPicker value={selectedSubmission} onChange={setSelectedSubmission} />
+                {isArticleSlot ? (
+                  <ArticlePicker value={selectedArticle} onChange={setSelectedArticle} />
+                ) : (
+                  <SubmissionPicker value={selectedSubmission} onChange={setSelectedSubmission} />
+                )}
               </div>
 
               <label className="block">

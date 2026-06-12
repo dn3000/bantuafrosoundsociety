@@ -20,20 +20,24 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const { submission_id, start_at, end_at } = body as {
+  const { submission_id, article_id, start_at, end_at } = body as {
     submission_id?: string
+    article_id?: string
     start_at?: string
     end_at?: string | null
   }
 
-  if (submission_id === undefined && start_at === undefined && end_at === undefined) {
+  if (submission_id === undefined && article_id === undefined && start_at === undefined && end_at === undefined) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+  }
+  if (submission_id !== undefined && article_id !== undefined) {
+    return NextResponse.json({ error: 'Provide at most one of submission_id or article_id' }, { status: 400 })
   }
 
   // Fetch current assignment to fill in unchanged fields for validation
   const { data: current, error: fetchErr } = await supabase
     .from('editorial_slot_assignments')
-    .select('id, slot_id, submission_id, start_at, end_at')
+    .select('id, slot_id, submission_id, article_id, start_at, end_at')
     .eq('id', id)
     .single()
   if (fetchErr || !current) {
@@ -41,7 +45,6 @@ export async function PATCH(
   }
 
   // Validate new submission if changing
-  const resolvedSubmissionId = submission_id ?? (current.submission_id as string)
   if (submission_id !== undefined) {
     const { data: submission, error: subErr } = await supabase
       .from('submissions')
@@ -51,23 +54,42 @@ export async function PATCH(
     if (subErr || !submission) {
       return NextResponse.json({ error: 'Submission not found' }, { status: 422 })
     }
-    if (submission.status !== 'approved') {
+    if ((submission as any).status !== 'approved') {
       return NextResponse.json(
-        { error: `Submission status is '${submission.status}'; only 'approved' submissions can be scheduled` },
+        { error: `Submission status is '${(submission as any).status}'; only 'approved' submissions can be scheduled` },
+        { status: 422 }
+      )
+    }
+  }
+
+  // Validate new article if changing
+  if (article_id !== undefined) {
+    const { data: article, error: artErr } = await supabase
+      .from('articles')
+      .select('id, status')
+      .eq('id', article_id)
+      .single()
+    if (artErr || !article) {
+      return NextResponse.json({ error: 'Article not found' }, { status: 422 })
+    }
+    if ((article as any).status !== 'published') {
+      return NextResponse.json(
+        { error: `Article status is '${(article as any).status}'; only 'published' articles can be scheduled` },
         { status: 422 }
       )
     }
   }
 
   const newStart: string = (start_at as string | undefined) ?? (current.start_at as string)
-  const newEnd: string | null = end_at !== undefined ? ((end_at as string | null) ?? null) : (current.end_at as string | null)
+  const newEnd: string | null = end_at !== undefined
+    ? ((end_at as string | null) ?? null)
+    : (current.end_at as string | null)
 
   if (newEnd !== null && new Date(newEnd) <= new Date(newStart)) {
     return NextResponse.json({ error: 'end_at must be after start_at' }, { status: 422 })
   }
 
   // Overlap check excluding this row
-  // [a, b) overlaps [c, d) when: a < d AND c < b  (treating NULL as +∞)
   let overlapQ = supabase
     .from('editorial_slot_assignments')
     .select('id, start_at, end_at')
@@ -94,8 +116,23 @@ export async function PATCH(
     )
   }
 
+  // Resolve content reference for update
+  let resolvedSubmissionId: string | null
+  let resolvedArticleId: string | null
+  if (submission_id !== undefined) {
+    resolvedSubmissionId = submission_id
+    resolvedArticleId = null
+  } else if (article_id !== undefined) {
+    resolvedSubmissionId = null
+    resolvedArticleId = article_id
+  } else {
+    resolvedSubmissionId = current.submission_id as string | null
+    resolvedArticleId = (current as any).article_id as string | null
+  }
+
   const updates: Record<string, unknown> = {
     submission_id: resolvedSubmissionId,
+    article_id: resolvedArticleId,
     start_at: newStart,
     end_at: newEnd,
     updated_at: new Date().toISOString(),

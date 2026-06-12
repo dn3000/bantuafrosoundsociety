@@ -11,11 +11,11 @@ export async function GET() {
   const [slotsRes, liveRes, assignmentsRes] = await Promise.all([
     supabase
       .from('editorial_slots')
-      .select('id, slot_key, display_name, description, position, is_active')
+      .select('id, slot_key, display_name, description, position, is_active, content_type')
       .order('position', { ascending: true }),
     supabase
       .from('v_editorial_live')
-      .select('slot_id, assignment_id, submission_id, start_at, end_at'),
+      .select('slot_id, assignment_id, submission_id, article_id, start_at, end_at'),
     supabase
       .from('editorial_slot_assignments')
       .select('slot_id, start_at, end_at'),
@@ -23,8 +23,17 @@ export async function GET() {
 
   if (slotsRes.error) return NextResponse.json({ error: slotsRes.error.message }, { status: 500 })
 
-  // Fetch submission details for live items
-  const liveSubIds = (liveRes.data ?? []).map((r) => (r as any).submission_id).filter(Boolean) as string[]
+  const liveRows = (liveRes.data ?? []) as Array<{
+    slot_id: string
+    assignment_id: string
+    submission_id: string | null
+    article_id: string | null
+    start_at: string
+    end_at: string | null
+  }>
+
+  // Fetch submission details for submission-backed live items
+  const liveSubIds = liveRows.map((r) => r.submission_id).filter(Boolean) as string[]
   const subMap: Record<string, {
     title: string
     artwork_url: string | null
@@ -41,6 +50,23 @@ export async function GET() {
     }
   }
 
+  // Fetch article details for article-backed live items
+  const liveArticleIds = liveRows.map((r) => r.article_id).filter(Boolean) as string[]
+  const articleMap: Record<string, {
+    title: string
+    cover_image_url: string | null
+    author: string
+  }> = {}
+  if (liveArticleIds.length > 0) {
+    const { data: arts } = await supabase
+      .from('articles')
+      .select('id, title, cover_image_url, author')
+      .in('id', liveArticleIds)
+    for (const a of arts ?? []) {
+      articleMap[(a as any).id] = a as unknown as typeof articleMap[string]
+    }
+  }
+
   // Per-slot upcoming / past counts (live assignments counted separately)
   const counts: Record<string, { upcoming: number; past: number }> = {}
   for (const a of assignmentsRes.data ?? []) {
@@ -52,22 +78,40 @@ export async function GET() {
     else if (endAt !== null && endAt <= now) counts[slotId].past++
   }
 
-  // Map live rows by slot_id
+  // Map live rows by slot_id, populating submission or article data
   const liveBySlot: Record<string, object> = {}
-  for (const row of liveRes.data ?? []) {
-    const r = row as any
-    const sub = subMap[r.submission_id]
-    const artist = Array.isArray(sub?.artists) ? sub.artists[0] : sub?.artists
-    liveBySlot[r.slot_id] = {
-      assignment_id: r.assignment_id,
-      submission_id: r.submission_id,
-      start_at: r.start_at,
-      end_at: r.end_at,
-      title: sub?.title ?? null,
-      artwork_url: sub?.artwork_url ?? null,
-      cover_image_url: sub?.cover_image_url ?? null,
-      artist_name: artist?.name ?? null,
-      artist_image_url: artist?.image_url ?? null,
+  for (const r of liveRows) {
+    if (r.submission_id) {
+      const sub = subMap[r.submission_id]
+      const artist = Array.isArray(sub?.artists) ? (sub.artists as any[])[0] : sub?.artists
+      liveBySlot[r.slot_id] = {
+        assignment_id: r.assignment_id,
+        submission_id: r.submission_id,
+        article_id: null,
+        ref_type: 'submission',
+        start_at: r.start_at,
+        end_at: r.end_at,
+        title: sub?.title ?? null,
+        artwork_url: sub?.artwork_url ?? null,
+        cover_image_url: sub?.cover_image_url ?? null,
+        artist_name: artist?.name ?? null,
+        artist_image_url: artist?.image_url ?? null,
+      }
+    } else if (r.article_id) {
+      const art = articleMap[r.article_id]
+      liveBySlot[r.slot_id] = {
+        assignment_id: r.assignment_id,
+        submission_id: null,
+        article_id: r.article_id,
+        ref_type: 'article',
+        start_at: r.start_at,
+        end_at: r.end_at,
+        title: art?.title ?? null,
+        artwork_url: null,
+        cover_image_url: art?.cover_image_url ?? null,
+        artist_name: art?.author ?? null,
+        artist_image_url: null,
+      }
     }
   }
 

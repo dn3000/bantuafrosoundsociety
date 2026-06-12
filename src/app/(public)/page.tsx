@@ -73,6 +73,16 @@ type ArticleRead = {
   cover_image_url: string | null
 }
 
+type ArticleLive = {
+  id: string
+  title: string
+  slug: string
+  dek: string | null
+  excerpt: string | null
+  cover_image_url: string | null
+  author: string
+}
+
 // ── Image helpers ──────────────────────────────────────────────────────────────
 
 function isRenderableImage(url: string | null | undefined): boolean {
@@ -157,10 +167,16 @@ function ArtworkSquare({
 export default async function HomePage() {
   const supabase = await createClient()
 
-  // 1. Live editorial assignments
-  const { data: liveItems } = await supabase
+  // 1. Live editorial assignments (article_id added by Slice 4 migration)
+  const { data: liveItemsRaw } = await supabase
     .from('v_editorial_live')
-    .select('slot_id, submission_id')
+    .select('slot_id, submission_id, article_id')
+
+  const liveItems = (liveItemsRaw ?? []) as Array<{
+    slot_id: string
+    submission_id: string | null
+    article_id?: string | null
+  }>
 
   // 2. Active editorial slots in display order
   const { data: slots } = await supabase
@@ -169,8 +185,8 @@ export default async function HomePage() {
     .eq('is_active', true)
     .order('position', { ascending: true })
 
-  // 3. Submissions for live items, with embedded artist
-  const liveSubIds = (liveItems ?? []).map((i) => i.submission_id)
+  // 3. Submissions for submission-backed live items, with embedded artist
+  const liveSubIds = liveItems.filter((i) => i.submission_id).map((i) => i.submission_id as string)
   const liveSubMap: Record<string, Submission> = {}
 
   if (liveSubIds.length > 0) {
@@ -180,7 +196,24 @@ export default async function HomePage() {
       .in('id', liveSubIds)
 
     for (const sub of liveSubs ?? []) {
-      liveSubMap[sub.id] = sub as unknown as Submission
+      liveSubMap[(sub as any).id] = sub as unknown as Submission
+    }
+  }
+
+  // 3b. Articles for article-backed live editorial items
+  const liveArticleIds = liveItems
+    .map((i) => i.article_id ?? null)
+    .filter(Boolean) as string[]
+  const liveArticleMap: Record<string, ArticleLive> = {}
+
+  if (liveArticleIds.length > 0) {
+    const { data: liveArts } = await supabase
+      .from('articles')
+      .select('id, title, slug, dek, excerpt, cover_image_url, author')
+      .in('id', liveArticleIds)
+    // RLS: only published articles returned — a non-published pick won't render
+    for (const a of liveArts ?? []) {
+      liveArticleMap[(a as any).id] = a as unknown as ArticleLive
     }
   }
 
@@ -354,25 +387,36 @@ export default async function HomePage() {
     }
   })
 
-  // Build slot_id → submission lookup
-  const liveBySlotId: Record<string, Submission> = {}
-  for (const item of liveItems ?? []) {
-    const sub = liveSubMap[item.submission_id]
-    if (sub) liveBySlotId[item.slot_id] = sub
+  // Build slot_id → content lookup (separate maps for submissions and articles)
+  const liveSubBySlotId: Record<string, Submission> = {}
+  const liveArticleBySlotId: Record<string, ArticleLive> = {}
+  for (const item of liveItems) {
+    if (item.submission_id) {
+      const sub = liveSubMap[item.submission_id]
+      if (sub) liveSubBySlotId[item.slot_id] = sub
+    } else if (item.article_id) {
+      const art = liveArticleMap[item.article_id]
+      if (art) liveArticleBySlotId[item.slot_id] = art
+    }
   }
 
-  // Hero slot
+  // Hero slot (always submission-backed)
   const heroSlot = (slots ?? []).find((s) => s.slot_key === 'homepage_hero')
-  const heroSub = heroSlot ? (liveBySlotId[heroSlot.id] ?? null) : null
+  const heroSub = heroSlot ? (liveSubBySlotId[heroSlot.id] ?? null) : null
 
-  // Non-hero editorial sections that have a live item
-  const editorialSections: Array<{ slot: EditorialSlot; sub: Submission }> = (
-    slots ?? []
-  )
+  // Non-hero editorial sections that have a live item (submission or article)
+  type EditorialSectionItem =
+    | { ref_type: 'submission'; slot: EditorialSlot; sub: Submission }
+    | { ref_type: 'article'; slot: EditorialSlot; article: ArticleLive }
+
+  const editorialSections: EditorialSectionItem[] = (slots ?? [])
     .filter((s) => s.slot_key !== 'homepage_hero')
-    .flatMap((slot) => {
-      const sub = liveBySlotId[slot.id]
-      return sub ? [{ slot, sub }] : []
+    .flatMap((slot): EditorialSectionItem[] => {
+      const sub = liveSubBySlotId[slot.id]
+      if (sub) return [{ ref_type: 'submission', slot, sub }]
+      const article = liveArticleBySlotId[slot.id]
+      if (article) return [{ ref_type: 'article', slot, article }]
+      return []
     })
 
   const hasContent =
@@ -430,31 +474,65 @@ export default async function HomePage() {
       {/* ── EDITORIAL SECTIONS ───────────────────────────────────────────── */}
       {editorialSections.length > 0 && (
         <section className="mb-14 space-y-6">
-          {editorialSections.map(({ slot, sub }) => (
-            <div key={slot.id}>
+          {editorialSections.map((item) => (
+            <div key={item.slot.id}>
               <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-2 flex items-center gap-1.5">
                 <span className="text-[var(--color-accent)]" aria-hidden>→</span>
-                {slot.display_name}
+                {item.slot.display_name}
               </h2>
-              <Link
-                href={`/release/${sub.id}`}
-                className="group flex items-center gap-4 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-colors duration-[var(--animate-fast)]"
-              >
-                <div className="w-14 h-14 flex-shrink-0 rounded-[var(--radius)] overflow-hidden">
-                  <ArtworkSquare submission={sub} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-[var(--color-fg-primary)] truncate group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
-                    {sub.title}
-                  </p>
-                  <p className="text-sm text-[var(--color-fg-secondary)] truncate mt-0.5">
-                    {sub.artists?.name ?? 'Unknown Artist'}
-                  </p>
-                </div>
-                <span className="text-[var(--color-fg-tertiary)] flex-shrink-0 text-sm ml-2" aria-hidden>
-                  →
-                </span>
-              </Link>
+              {item.ref_type === 'article' ? (
+                <Link
+                  href={`/read/${item.article.slug}`}
+                  className="group flex items-center gap-4 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-colors duration-[var(--animate-fast)]"
+                >
+                  <div className="w-14 h-14 flex-shrink-0 rounded-[var(--radius)] overflow-hidden">
+                    {item.article.cover_image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.article.cover_image_url}
+                        alt={item.article.title}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-[var(--color-bg-higher)] flex items-center justify-center text-[var(--color-fg-tertiary)] font-semibold text-sm select-none">
+                        {item.article.title.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-[var(--color-fg-primary)] truncate group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
+                      {item.article.title}
+                    </p>
+                    <p className="text-sm text-[var(--color-fg-secondary)] truncate mt-0.5">
+                      {item.article.dek ?? item.article.excerpt ?? item.article.author}
+                    </p>
+                  </div>
+                  <span className="text-[var(--color-fg-tertiary)] flex-shrink-0 text-sm ml-2" aria-hidden>
+                    →
+                  </span>
+                </Link>
+              ) : (
+                <Link
+                  href={`/release/${item.sub.id}`}
+                  className="group flex items-center gap-4 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-colors duration-[var(--animate-fast)]"
+                >
+                  <div className="w-14 h-14 flex-shrink-0 rounded-[var(--radius)] overflow-hidden">
+                    <ArtworkSquare submission={item.sub} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-[var(--color-fg-primary)] truncate group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
+                      {item.sub.title}
+                    </p>
+                    <p className="text-sm text-[var(--color-fg-secondary)] truncate mt-0.5">
+                      {item.sub.artists?.name ?? 'Unknown Artist'}
+                    </p>
+                  </div>
+                  <span className="text-[var(--color-fg-tertiary)] flex-shrink-0 text-sm ml-2" aria-hidden>
+                    →
+                  </span>
+                </Link>
+              )}
             </div>
           ))}
         </section>

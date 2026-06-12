@@ -15,16 +15,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const { slot_id, slot_key, submission_id, start_at, end_at } = body as {
+  const { slot_id, slot_key, submission_id, article_id, start_at, end_at } = body as {
     slot_id?: string
     slot_key?: string
     submission_id?: string
+    article_id?: string
     start_at?: string
     end_at?: string | null
   }
 
-  if (!submission_id) {
-    return NextResponse.json({ error: 'submission_id required' }, { status: 400 })
+  // Exactly one content reference required
+  const hasSubmission = !!submission_id
+  const hasArticle = !!article_id
+  if (!hasSubmission && !hasArticle) {
+    return NextResponse.json({ error: 'submission_id or article_id required' }, { status: 400 })
+  }
+  if (hasSubmission && hasArticle) {
+    return NextResponse.json(
+      { error: 'Provide exactly one of submission_id or article_id, not both' },
+      { status: 400 }
+    )
   }
 
   // Resolve slot_id from slot_key if needed
@@ -44,20 +54,37 @@ export async function POST(request: Request) {
     resolvedSlotId = slot.id as string
   }
 
-  // Validate submission exists and is approved
-  const { data: submission, error: subErr } = await supabase
-    .from('submissions')
-    .select('id, status')
-    .eq('id', submission_id)
-    .single()
-  if (subErr || !submission) {
-    return NextResponse.json({ error: 'Submission not found' }, { status: 422 })
-  }
-  if (submission.status !== 'approved') {
-    return NextResponse.json(
-      { error: `Submission status is '${submission.status}'; only 'approved' submissions can be scheduled` },
-      { status: 422 }
-    )
+  // Validate content reference
+  if (hasSubmission) {
+    const { data: submission, error: subErr } = await supabase
+      .from('submissions')
+      .select('id, status')
+      .eq('id', submission_id!)
+      .single()
+    if (subErr || !submission) {
+      return NextResponse.json({ error: 'Submission not found' }, { status: 422 })
+    }
+    if ((submission as any).status !== 'approved') {
+      return NextResponse.json(
+        { error: `Submission status is '${(submission as any).status}'; only 'approved' submissions can be scheduled` },
+        { status: 422 }
+      )
+    }
+  } else {
+    const { data: article, error: artErr } = await supabase
+      .from('articles')
+      .select('id, status')
+      .eq('id', article_id!)
+      .single()
+    if (artErr || !article) {
+      return NextResponse.json({ error: 'Article not found' }, { status: 422 })
+    }
+    if ((article as any).status !== 'published') {
+      return NextResponse.json(
+        { error: `Article status is '${(article as any).status}'; only 'published' articles can be scheduled` },
+        { status: 422 }
+      )
+    }
   }
 
   const newStart = (start_at as string | undefined) ?? new Date().toISOString()
@@ -67,10 +94,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'end_at must be after start_at' }, { status: 422 })
   }
 
-  // Overlap check: does [newStart, newEnd) overlap any existing assignment for this slot?
-  // [a, b) overlaps [c, d) when: a < d AND c < b  (treating NULL as +∞)
-  //   → existing.end_at IS NULL OR existing.end_at > newStart
-  //   → newEnd IS NULL OR existing.start_at < newEnd
+  // Overlap check: [a, b) overlaps [c, d) when a < d AND c < b (NULL = +∞)
   let overlapQ = supabase
     .from('editorial_slot_assignments')
     .select('id, start_at, end_at')
@@ -100,7 +124,8 @@ export async function POST(request: Request) {
     .from('editorial_slot_assignments')
     .insert({
       slot_id: resolvedSlotId,
-      submission_id,
+      submission_id: hasSubmission ? submission_id! : null,
+      article_id: hasArticle ? article_id! : null,
       start_at: newStart,
       end_at: newEnd,
       who_assigned: user.id,

@@ -14,6 +14,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const statusFilter = searchParams.get('status') ?? ''
+  const searchFilter = searchParams.get('search') ?? ''
 
   let query = supabase
     .from('articles')
@@ -22,6 +23,10 @@ export async function GET(request: Request) {
 
   if (ALLOWED_STATUSES.includes(statusFilter as (typeof ALLOWED_STATUSES)[number])) {
     query = query.eq('status', statusFilter)
+  }
+
+  if (searchFilter) {
+    query = query.ilike('title', `%${searchFilter}%`)
   }
 
   const { data, error, count } = await query
