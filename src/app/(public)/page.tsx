@@ -4,6 +4,52 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { CardCarousel, type CarouselItem } from '@/components/CardCarousel'
 import { VideoCarousel, type VideoCarouselItem } from '@/components/VideoCarousel'
+import { HeroCarousel, type HeroCarouselItem } from '@/components/HeroCarousel'
+
+// ── TEMPORARY sample data — replaced with real CMS data in H2 ────────────────
+const SAMPLE_HERO_ITEMS: HeroCarouselItem[] = [
+  {
+    id: 'sample-1',
+    type: 'release',
+    title: 'Azonto Flux',
+    subtitle: 'Ebo Taylor Jr.',
+    imageUrl: 'https://picsum.photos/seed/bass1/520/680',
+    href: '/explore',
+  },
+  {
+    id: 'sample-2',
+    type: 'playlist',
+    title: 'West African Night Moves',
+    subtitle: 'Curated by BASS Collective',
+    imageUrl: 'https://picsum.photos/seed/bass2/520/680',
+    href: '/explore',
+  },
+  {
+    id: 'sample-3',
+    type: 'video',
+    title: 'Live at Alliance Française',
+    subtitle: 'Afrobeats Session #14',
+    imageUrl: 'https://picsum.photos/seed/bass3/520/680',
+    href: '/watch',
+  },
+  {
+    id: 'sample-4',
+    type: 'article',
+    title: 'The New Wave of Afro-Fusion: What 2026 Sounds Like',
+    subtitle: 'Feature · 8 min read',
+    imageUrl: 'https://picsum.photos/seed/bass4/520/680',
+    href: '/read',
+  },
+  {
+    id: 'sample-5',
+    type: 'release',
+    title: 'Kinshasa Echoes',
+    subtitle: 'BASS × Congo Square',
+    imageUrl: 'https://picsum.photos/seed/bass5/520/680',
+    href: '/explore',
+  },
+]
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -449,6 +495,9 @@ export default async function HomePage() {
 
   return (
     <div className="px-4 sm:px-6 py-8 max-w-5xl mx-auto">
+      {/* ── HERO CAROUSEL (H1 sample data — replaced in H2) ─────────────── */}
+      <HeroCarousel items={SAMPLE_HERO_ITEMS} caption="Listen to BASS" />
+
       {!hasContent && (
         <p className="text-[var(--color-fg-tertiary)] text-sm text-center mt-24">
           Coming soon.
