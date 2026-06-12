@@ -62,6 +62,17 @@ type EditorialSlot = {
   position: number
 }
 
+type ArticleRead = {
+  id: string
+  kind: string
+  title: string
+  slug: string
+  dek: string | null
+  excerpt: string | null
+  source_name: string | null
+  cover_image_url: string | null
+}
+
 // ── Image helpers ──────────────────────────────────────────────────────────────
 
 function isRenderableImage(url: string | null | undefined): boolean {
@@ -287,7 +298,28 @@ export default async function HomePage() {
   const liveSetItems = toVideoItems((liveSetVideosRaw ?? []) as unknown as VideoRow[])
   const musicVideoItems = toVideoItems((musicVideoVideosRaw ?? []) as unknown as VideoRow[])
 
-  // 9. Trending Artists — artists with a real avatar, FEATURED first then
+  // 9. Recent published articles for the Read carousel
+  const { data: articlesRaw } = await supabase
+    .from('articles')
+    .select('id, kind, title, slug, dek, excerpt, source_name, cover_image_url')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .limit(10)
+
+  const articles = (articlesRaw ?? []) as ArticleRead[]
+
+  const readItems: CarouselItem[] = articles.map((a) => ({
+    id: a.id,
+    cover_image_url: a.cover_image_url,
+    title: a.title,
+    subtitle:
+      a.kind === 'link'
+        ? (a.source_name ? `via ${a.source_name}` : null)
+        : (a.dek || null),
+    href: `/read/${a.slug}`,
+  }))
+
+  // 10. Trending Artists — artists with a real avatar, FEATURED first then
   // ACTIVE, then WATCH, name ASC for ties. PostgREST can't express a CASE
   // ordering directly, so we fetch a bounded pool and sort by tier-priority
   // in JS before slicing the top 18.
@@ -346,6 +378,7 @@ export default async function HomePage() {
   const hasContent =
     heroSub ||
     editorialSections.length > 0 ||
+    readItems.length > 0 ||
     trendingArtistItems.length > 0 ||
     newAlbumItems.length > 0 ||
     newReleaseItems.length > 0 ||
@@ -426,6 +459,9 @@ export default async function HomePage() {
           ))}
         </section>
       )}
+
+      {/* ── READ CAROUSEL ───────────────────────────────────────────────── */}
+      <CardCarousel title="Read" items={readItems} rows={1} shape="square" className="mb-14" />
 
       {/* ── TRENDING ARTISTS CAROUSEL ────────────────────────────────────── */}
       <CardCarousel title="Trending Artists" items={trendingArtistItems} rows={1} shape="circle" className="mb-14" />

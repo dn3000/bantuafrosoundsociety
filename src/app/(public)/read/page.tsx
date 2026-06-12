@@ -29,7 +29,7 @@ function ArticleCard({ article }: { article: ArticleRow }) {
   return (
     <Link
       href={`/read/${article.slug}`}
-      className="group flex flex-col bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] overflow-hidden hover:bg-[var(--color-bg-higher)] transition-colors"
+      className="group flex flex-col h-full bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] overflow-hidden hover:bg-[var(--color-bg-higher)] transition-colors"
     >
       {/* Cover image */}
       <div className="aspect-[16/9] w-full bg-[var(--color-bg-higher)] overflow-hidden flex-shrink-0">
@@ -120,7 +120,7 @@ export default async function ReadPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
           {articles.map((a) => (
             <ArticleCard key={a.id} article={a} />
           ))}
