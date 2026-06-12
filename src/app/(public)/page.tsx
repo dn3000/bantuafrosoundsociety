@@ -75,10 +75,12 @@ type ArticleRead = {
 
 type ArticleLive = {
   id: string
+  kind: string | null
   title: string
   slug: string
   dek: string | null
   excerpt: string | null
+  source_name: string | null
   cover_image_url: string | null
   author: string
 }
@@ -209,7 +211,7 @@ export default async function HomePage() {
   if (liveArticleIds.length > 0) {
     const { data: liveArts } = await supabase
       .from('articles')
-      .select('id, title, slug, dek, excerpt, cover_image_url, author')
+      .select('id, kind, title, slug, dek, excerpt, source_name, cover_image_url, author')
       .in('id', liveArticleIds)
     // RLS: only published articles returned — a non-published pick won't render
     for (const a of liveArts ?? []) {
@@ -341,16 +343,8 @@ export default async function HomePage() {
 
   const articles = (articlesRaw ?? []) as ArticleRead[]
 
-  const readItems: CarouselItem[] = articles.map((a) => ({
-    id: a.id,
-    cover_image_url: a.cover_image_url,
-    title: a.title,
-    subtitle:
-      a.kind === 'link'
-        ? (a.source_name ? `via ${a.source_name}` : null)
-        : (a.dek || null),
-    href: `/read/${a.slug}`,
-  }))
+  // readItems is derived below, after pickReadArticle is known (so the pick can
+  // be deduped from the carousel).
 
   // 10. Trending Artists — artists with a real avatar, FEATURED first then
   // ACTIVE, then WATCH, name ASC for ties. PostgREST can't express a CASE
@@ -404,13 +398,33 @@ export default async function HomePage() {
   const heroSlot = (slots ?? []).find((s) => s.slot_key === 'homepage_hero')
   const heroSub = heroSlot ? (liveSubBySlotId[heroSlot.id] ?? null) : null
 
+  // Editor's Pick for the Read section
+  const pickReadSlot = (slots ?? []).find((s) => s.slot_key === 'editors_pick_read')
+  const pickReadArticle: ArticleLive | null = pickReadSlot
+    ? (liveArticleBySlotId[pickReadSlot.id] ?? null)
+    : null
+
+  // Recent articles for the Read carousel — pick deduped so it never appears twice
+  const readItems: CarouselItem[] = articles
+    .filter((a) => a.id !== pickReadArticle?.id)
+    .map((a) => ({
+      id: a.id,
+      cover_image_url: a.cover_image_url,
+      title: a.title,
+      subtitle:
+        a.kind === 'link'
+          ? (a.source_name ? `via ${a.source_name}` : null)
+          : (a.dek || null),
+      href: `/read/${a.slug}`,
+    }))
+
   // Non-hero editorial sections that have a live item (submission or article)
   type EditorialSectionItem =
     | { ref_type: 'submission'; slot: EditorialSlot; sub: Submission }
     | { ref_type: 'article'; slot: EditorialSlot; article: ArticleLive }
 
   const editorialSections: EditorialSectionItem[] = (slots ?? [])
-    .filter((s) => s.slot_key !== 'homepage_hero')
+    .filter((s) => s.slot_key !== 'homepage_hero' && s.slot_key !== 'editors_pick_read')
     .flatMap((slot): EditorialSectionItem[] => {
       const sub = liveSubBySlotId[slot.id]
       if (sub) return [{ ref_type: 'submission', slot, sub }]
@@ -421,6 +435,7 @@ export default async function HomePage() {
 
   const hasContent =
     heroSub ||
+    pickReadArticle !== null ||
     editorialSections.length > 0 ||
     readItems.length > 0 ||
     trendingArtistItems.length > 0 ||
@@ -538,8 +553,63 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── READ CAROUSEL ───────────────────────────────────────────────── */}
-      <CardCarousel title="Read" items={readItems} rows={1} shape="square" className="mb-14" />
+      {/* ── READ ────────────────────────────────────────────────────────── */}
+      {(pickReadArticle || readItems.length > 0) && (
+        <section className="mb-14">
+          <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
+            <span className="text-[var(--color-accent)]" aria-hidden>→</span>
+            Read
+          </h2>
+
+          {/* Editor's Pick featured lead card */}
+          {pickReadArticle && (
+            <Link
+              href={`/read/${pickReadArticle.slug}`}
+              className="group flex flex-col sm:flex-row sm:items-start gap-5 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-4 sm:p-5 hover:bg-[var(--color-bg-higher)] transition-colors duration-[var(--animate-default)] mb-6"
+            >
+              {/* Cover image — full-width 16:9 on mobile, fixed square on desktop */}
+              <div className="w-full aspect-video sm:w-52 sm:aspect-square sm:flex-shrink-0 rounded-[8px] overflow-hidden">
+                {pickReadArticle.cover_image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={pickReadArticle.cover_image_url}
+                    alt={pickReadArticle.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-[var(--color-bg-higher)] flex items-center justify-center text-[var(--color-fg-tertiary)] font-semibold text-2xl select-none">
+                    {pickReadArticle.title.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </div>
+
+              {/* Text */}
+              <div className="flex-1 flex flex-col gap-2 sm:justify-center">
+                <p className="text-[10px] uppercase tracking-widest text-[var(--color-accent)] font-semibold">
+                  → Editor&apos;s Pick
+                </p>
+                <h3 className="text-xl sm:text-2xl font-bold leading-tight text-[var(--color-fg-primary)] group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-default)] [font-family:var(--font-heading)]">
+                  {pickReadArticle.title}
+                </h3>
+                {(pickReadArticle.dek ?? pickReadArticle.excerpt) && (
+                  <p className="text-sm text-[var(--color-fg-secondary)] line-clamp-2">
+                    {pickReadArticle.dek ?? pickReadArticle.excerpt}
+                  </p>
+                )}
+                {pickReadArticle.kind === 'link' && pickReadArticle.source_name && (
+                  <span className="self-start text-xs font-medium text-[var(--color-fg-tertiary)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-2.5 py-1">
+                    via {pickReadArticle.source_name}
+                  </span>
+                )}
+              </div>
+            </Link>
+          )}
+
+          {/* Recent articles carousel — pick already removed from this list */}
+          <CardCarousel items={readItems} rows={1} shape="square" />
+        </section>
+      )}
 
       {/* ── TRENDING ARTISTS CAROUSEL ────────────────────────────────────── */}
       <CardCarousel title="Trending Artists" items={trendingArtistItems} rows={1} shape="circle" className="mb-14" />

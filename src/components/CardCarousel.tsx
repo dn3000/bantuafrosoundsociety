@@ -71,7 +71,7 @@ export function CardCarousel({
   rows = 1,
   shape = 'square',
 }: {
-  title: string
+  title?: string
   items: CarouselItem[]
   /** Optional spacing/utility classes for the outer section (e.g. "mb-14"). */
   className?: string
@@ -98,10 +98,12 @@ export function CardCarousel({
   return (
     <section className={className}>
       {/* Section label in the "→ TITLE" style used across the homepage. */}
-      <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
-        <span className="text-[var(--color-accent)]" aria-hidden>→</span>
-        {title}
-      </h2>
+      {title && (
+        <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
+          <span className="text-[var(--color-accent)]" aria-hidden>→</span>
+          {title}
+        </h2>
+      )}
 
       {/* Horizontally scrollable track (1 or 2 rows): scroll-snap on
           mobile/desktop, scrollbar hidden cross-browser via Tailwind arbitrary
