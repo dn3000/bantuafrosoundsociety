@@ -492,13 +492,13 @@ export default async function HomePage() {
           {editorialSections.map((item) => (
             <div key={item.slot.id}>
               <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-2 flex items-center gap-1.5">
-                <span className="text-[var(--color-accent)]" aria-hidden>→</span>
                 {item.slot.display_name}
+                <span className="text-[var(--color-accent)]" aria-hidden>→</span>
               </h2>
               {item.ref_type === 'article' ? (
                 <Link
                   href={`/read/${item.article.slug}`}
-                  className="group flex items-center gap-4 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-colors duration-[var(--animate-fast)]"
+                  className="group flex items-center gap-4 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-all duration-[var(--animate-fast)] motion-safe:hover:-translate-y-[4px] motion-safe:hover:shadow-[0_6px_20px_rgba(0,0,0,0.4)]"
                 >
                   <div className="w-14 h-14 flex-shrink-0 rounded-[var(--radius)] overflow-hidden">
                     {item.article.cover_image_url ? (
@@ -530,7 +530,7 @@ export default async function HomePage() {
               ) : (
                 <Link
                   href={`/release/${item.sub.id}`}
-                  className="group flex items-center gap-4 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-colors duration-[var(--animate-fast)]"
+                  className="group flex items-center gap-4 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 hover:bg-[var(--color-bg-higher)] transition-all duration-[var(--animate-fast)] motion-safe:hover:-translate-y-[4px] motion-safe:hover:shadow-[0_6px_20px_rgba(0,0,0,0.4)]"
                 >
                   <div className="w-14 h-14 flex-shrink-0 rounded-[var(--radius)] overflow-hidden">
                     <ArtworkSquare submission={item.sub} />
@@ -557,15 +557,15 @@ export default async function HomePage() {
       {(pickReadArticle || readItems.length > 0) && (
         <section className="mb-14">
           <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
-            <span className="text-[var(--color-accent)]" aria-hidden>→</span>
             Read
+            <span className="text-[var(--color-accent)]" aria-hidden>→</span>
           </h2>
 
           {/* Editor's Pick featured lead card */}
           {pickReadArticle && (
             <Link
               href={`/read/${pickReadArticle.slug}`}
-              className="group flex flex-col sm:flex-row sm:items-start gap-5 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-4 sm:p-5 hover:bg-[var(--color-bg-higher)] transition-colors duration-[var(--animate-default)] mb-6"
+              className="group flex flex-col sm:flex-row sm:items-start gap-5 bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-4 sm:p-5 hover:bg-[var(--color-bg-higher)] transition-all duration-[var(--animate-default)] mb-6 motion-safe:hover:-translate-y-[4px] motion-safe:hover:shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
             >
               {/* Cover image — full-width 16:9 on mobile, fixed square on desktop */}
               <div className="w-full aspect-video sm:w-52 sm:aspect-square sm:flex-shrink-0 rounded-[8px] overflow-hidden">
@@ -587,7 +587,7 @@ export default async function HomePage() {
               {/* Text */}
               <div className="flex-1 flex flex-col gap-2 sm:justify-center">
                 <p className="text-[10px] uppercase tracking-widest text-[var(--color-accent)] font-semibold">
-                  → Editor&apos;s Pick
+                  Editor&apos;s Pick →
                 </p>
                 <h3 className="text-xl sm:text-2xl font-bold leading-tight text-[var(--color-fg-primary)] group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-default)] [font-family:var(--font-heading)]">
                   {pickReadArticle.title}
@@ -632,20 +632,20 @@ export default async function HomePage() {
       {recent.length > 0 && (
         <section>
           <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
-            <span className="text-[var(--color-accent)]" aria-hidden>→</span>
             Latest
+            <span className="text-[var(--color-accent)]" aria-hidden>→</span>
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {recent.map((sub) => (
               <Link
                 key={sub.id}
                 href={`/release/${sub.id}`}
-                className="group"
+                className="group motion-safe:transition-[transform,filter] motion-safe:duration-200 motion-safe:ease-out motion-safe:hover:-translate-y-[4px] motion-safe:hover:drop-shadow-[0_4px_16px_rgba(0,0,0,0.5)]"
               >
                 <div className="aspect-square rounded-[8px] overflow-hidden mb-2">
                   <ArtworkSquare submission={sub} radiusClass="rounded-[8px]" />
                 </div>
-                <p className="text-sm font-semibold text-[var(--color-fg-primary)] truncate group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
+                <p className="font-heading text-sm font-semibold text-[var(--color-fg-primary)] line-clamp-2 group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
                   {sub.title}
                 </p>
                 <p className="text-xs text-[var(--color-fg-secondary)] truncate mt-0.5">

@@ -97,11 +97,11 @@ export function CardCarousel({
 
   return (
     <section className={className}>
-      {/* Section label in the "→ TITLE" style used across the homepage. */}
+      {/* Section label in the "TITLE →" style used across the homepage. */}
       {title && (
         <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
-          <span className="text-[var(--color-accent)]" aria-hidden>→</span>
           {title}
+          <span className="text-[var(--color-accent)]" aria-hidden>→</span>
         </h2>
       )}
 
@@ -122,7 +122,7 @@ export function CardCarousel({
               <div className={`aspect-square ${artworkRadius} overflow-hidden mb-2`}>
                 <CardArtwork item={item} radiusClass={artworkRadius} />
               </div>
-              <p className="text-sm font-semibold text-[var(--color-fg-primary)] leading-snug line-clamp-2 group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
+              <p className="font-heading text-sm font-semibold text-[var(--color-fg-primary)] leading-snug line-clamp-2 group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
                 {item.title}
               </p>
               {item.subtitle && (
@@ -138,7 +138,7 @@ export function CardCarousel({
             </>
           )
 
-          const cardClass = 'group shrink-0 snap-start w-40 sm:w-44'
+          const cardClass = 'group shrink-0 snap-start w-40 sm:w-44 motion-safe:transition-[transform,filter] motion-safe:duration-200 motion-safe:ease-out motion-safe:hover:-translate-y-[4px] motion-safe:hover:drop-shadow-[0_4px_16px_rgba(0,0,0,0.5)]'
 
           if (!item.href) {
             return (

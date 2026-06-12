@@ -46,7 +46,7 @@ function PlayOverlay() {
 
 export function VideoCard({ item }: { item: VideoCarouselItem }) {
   return (
-    <Link href={item.href} className="group block">
+    <Link href={item.href} className="group block motion-safe:transition-[transform,filter] motion-safe:duration-200 motion-safe:ease-out motion-safe:hover:-translate-y-[4px] motion-safe:hover:drop-shadow-[0_4px_16px_rgba(0,0,0,0.5)]">
       {/* 16:9 thumbnail with centered play overlay */}
       <div className="relative aspect-video rounded-[8px] overflow-hidden mb-2 bg-[var(--color-bg-higher)]">
         {item.thumbnail_url ? (
@@ -68,12 +68,12 @@ export function VideoCard({ item }: { item: VideoCarouselItem }) {
       </div>
 
       {/* Small category label */}
-      <p className="text-[10px] uppercase tracking-widest text-[var(--color-accent)] font-semibold mb-1 truncate">
+      <p className="text-[10px] uppercase tracking-widest text-[var(--color-accent)] font-semibold mb-1.5 truncate">
         {CATEGORY_LABELS[item.category] ?? item.category}
       </p>
 
       {/* 2-line-clamped title */}
-      <p className="text-sm font-semibold text-[var(--color-fg-primary)] leading-snug line-clamp-2 group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
+      <p className="font-heading text-sm font-semibold text-[var(--color-fg-primary)] leading-snug line-clamp-2 group-hover:text-[var(--color-accent)] transition-colors duration-[var(--animate-fast)]">
         {item.title}
       </p>
 
@@ -106,10 +106,10 @@ export function VideoCarousel({
 
   return (
     <section className={className}>
-      {/* "→ TITLE" section-label style used across the homepage */}
+      {/* "TITLE →" section-label style used across the homepage */}
       <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
-        <span className="text-[var(--color-accent)]" aria-hidden>→</span>
         {title}
+        <span className="text-[var(--color-accent)]" aria-hidden>→</span>
       </h2>
 
       {/* Horizontally scrollable track: scroll-snap, scrollbar hidden */}
