@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeft,
+  BookOpen,
   Database,
   Disc,
   FileText,
@@ -39,6 +40,7 @@ const NAV: NavGroup[] = [
       { href: '/admin/artists', label: 'Artists', icon: Users },
       { href: '/admin/submissions', label: 'Submissions', icon: FileText },
       { href: '/admin/videos', label: 'Videos', icon: Video },
+      { href: '/admin/articles', label: 'Articles', icon: BookOpen },
     ],
   },
   {
