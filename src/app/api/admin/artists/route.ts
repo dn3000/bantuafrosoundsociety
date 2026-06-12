@@ -59,7 +59,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from('artists')
     .select(
-      'id, name, slug, tier, status, is_tracked, country, city, subgenres, image_url, updated_at, last_scanned_at, spotify_artist_id',
+      'id, name, slug, tier, status, is_tracked, country, city, subgenres, image_url, updated_at, last_scanned_at, spotify_artist_id, youtube_topic_channel_id, youtube_channel_id',
       { count: 'exact' },
     )
     .range(offset, offset + limit - 1)

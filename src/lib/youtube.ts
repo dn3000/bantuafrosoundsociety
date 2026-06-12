@@ -283,6 +283,38 @@ export function categorizeVideo(
   return 'other'
 }
 
+// Batch-fetch channel titles by ID. Accepts up to 500 IDs, batches into
+// groups of 50 (the API max), costs 1 quota unit per batch call.
+// Returns only the channels found; missing IDs are silently omitted.
+export async function getChannelsByIds(
+  ids: string[],
+): Promise<{ id: string; title: string }[]> {
+  const key = process.env.YOUTUBE_API_KEY
+  if (!key || ids.length === 0) return []
+
+  const results: { id: string; title: string }[] = []
+  for (let i = 0; i < ids.length; i += 50) {
+    const batch = ids.slice(i, i + 50)
+    try {
+      const res = await fetch(
+        `${BASE}/channels?part=snippet&id=${batch.join(',')}&key=${key}`,
+      )
+      if (!res.ok) continue
+      const json: unknown = await res.json()
+      const items = (json as { items?: unknown[] })?.items ?? []
+      for (const raw of items) {
+        const item = raw as { id?: string; snippet?: { title?: string } }
+        if (item?.id && item?.snippet?.title) {
+          results.push({ id: item.id, title: item.snippet.title })
+        }
+      }
+    } catch {
+      // skip batch on error
+    }
+  }
+  return results
+}
+
 // Costs ~2 search quota units (100 units each).
 // Defensive: never throws, returns nulls for any failed arm.
 export async function suggestChannels(name: string): Promise<SuggestResult> {

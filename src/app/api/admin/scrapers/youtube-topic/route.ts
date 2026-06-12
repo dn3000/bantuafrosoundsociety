@@ -6,7 +6,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = await createClient()
 
   try {
@@ -18,11 +18,21 @@ export async function POST() {
     const { data: adminCheck } = await supabase.rpc('is_admin')
     if (!adminCheck) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+    // Body params: limit (max artists for the release ingestion pass, default 20),
+    // trackedOnly (default false, but tracked artists always run first).
+    let body: Record<string, unknown> = {}
+    try { body = await request.json() } catch { /* no body = use defaults */ }
+    const limit = typeof body.limit === 'number'
+      ? Math.min(Math.max(Math.round(body.limit), 1), 100)
+      : 20
+    const trackedOnly = body.trackedOnly === true
+
     let imagesBackfilled = 0
     let artistsScanned = 0
     let inserted = 0
     let duplicates = 0
     const errors: { artist: string; error: string }[] = []
+    const artistsProcessed: { name: string; inserted: number; duplicates: number }[] = []
 
     // --- Image backfill pass ---
     // Tracked artists that have at least one YouTube channel ID but no usable profile image.
@@ -69,23 +79,47 @@ export async function POST() {
     }
 
     // --- Release ingestion pass ---
-    // Tracked artists with a resolved Topic channel. Derives the uploads playlist
-    // via the UC→UU convention (0 extra API calls), then fetches the 25 most recent
-    // uploads and inserts each as a pending submission for review.
-    const { data: topicArtists, error: topicErr } = await supabase
+    // Select candidates: artists with a Topic channel, skipping those already
+    // ingested (≥1 existing youtube-topic submission). Tracked artists run first
+    // so each run advances to the next un-ingested batch in priority order.
+
+    // Collect already-ingested artist IDs so we can skip them.
+    const { data: ingestedRows } = await supabase
+      .from('submissions')
+      .select('primary_artist_id')
+      .eq('source_method', 'youtube-topic')
+    const ingestedIds = new Set<string>(
+      (ingestedRows ?? [])
+        .map((r) => r.primary_artist_id as string)
+        .filter(Boolean),
+    )
+
+    let candidateQuery = supabase
       .from('artists')
-      .select('id, name, youtube_topic_channel_id')
-      .eq('is_tracked', true)
+      .select('id, name, youtube_topic_channel_id, is_tracked')
       .not('youtube_topic_channel_id', 'is', null)
+    if (trackedOnly) candidateQuery = candidateQuery.eq('is_tracked', true)
+    candidateQuery = candidateQuery
+      .order('is_tracked', { ascending: false })
+      .order('name', { ascending: true })
+
+    const { data: allCandidates, error: topicErr } = await candidateQuery
     if (topicErr) return NextResponse.json({ error: topicErr.message }, { status: 500 })
 
-    for (const row of topicArtists ?? []) {
+    const candidates = (allCandidates ?? [])
+      .filter((r) => !ingestedIds.has(r.id as string))
+      .slice(0, limit)
+
+    for (const row of candidates) {
       const artistId = row.id as string
       const name = row.name as string
       const topicId = row.youtube_topic_channel_id as string
       const playlistId = uploadsPlaylistId(topicId)
       if (!playlistId) continue
       artistsScanned++
+
+      let perInserted = 0
+      let perDuplicates = 0
 
       try {
         const uploads = await getRecentUploads(playlistId, 25)
@@ -100,6 +134,7 @@ export async function POST() {
             .maybeSingle()
           if (existing) {
             duplicates++
+            perDuplicates++
             continue
           }
 
@@ -120,16 +155,20 @@ export async function POST() {
             // 23505 = unique_violation (source_url or youtube_video_id conflict)
             if (insErr.code === '23505') {
               duplicates++
+              perDuplicates++
             } else {
               errors.push({ artist: name, error: insErr.message })
             }
           } else {
             inserted++
+            perInserted++
           }
         }
       } catch (e) {
         errors.push({ artist: name, error: `uploads: ${e instanceof Error ? e.message : 'unknown'}` })
       }
+
+      artistsProcessed.push({ name, inserted: perInserted, duplicates: perDuplicates })
     }
 
     // --- Artwork upgrade pass ---
@@ -157,7 +196,7 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({ artistsScanned, imagesBackfilled, inserted, duplicates, artworkUpgraded, errors })
+    return NextResponse.json({ artistsScanned, imagesBackfilled, inserted, duplicates, artworkUpgraded, artistsProcessed, errors })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'unknown' },

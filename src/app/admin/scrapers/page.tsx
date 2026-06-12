@@ -167,11 +167,14 @@ export default function ScrapersPage() {
 
   // YouTube Topic ingestion (one-shot, no cursor)
   const [ytPhase, setYtPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [ytLimit, setYtLimit] = useState(20)
+  const [ytTrackedOnly, setYtTrackedOnly] = useState(false)
   const [ytResult, setYtResult] = useState<{
     artistsScanned: number
     imagesBackfilled: number
     inserted: number
     duplicates: number
+    artistsProcessed: { name: string; inserted: number; duplicates: number }[]
     errors: { artist: string; error: string }[]
   } | null>(null)
   const [ytError, setYtError] = useState<string | null>(null)
@@ -587,7 +590,11 @@ export default function ScrapersPage() {
     setYtResult(null)
     setYtError(null)
     try {
-      const res = await fetch('/api/admin/scrapers/youtube-topic', { method: 'POST' })
+      const res = await fetch('/api/admin/scrapers/youtube-topic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: ytLimit, trackedOnly: ytTrackedOnly }),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
       setYtResult({
@@ -595,6 +602,7 @@ export default function ScrapersPage() {
         imagesBackfilled: typeof data.imagesBackfilled === 'number' ? data.imagesBackfilled : 0,
         inserted: typeof data.inserted === 'number' ? data.inserted : 0,
         duplicates: typeof data.duplicates === 'number' ? data.duplicates : 0,
+        artistsProcessed: Array.isArray(data.artistsProcessed) ? data.artistsProcessed : [],
         errors: Array.isArray(data.errors) ? data.errors : [],
       })
       setYtPhase('done')
@@ -972,29 +980,81 @@ export default function ScrapersPage() {
         <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-5 mb-6">
           <h2 className="text-sm font-semibold text-[var(--color-fg-primary)] mb-2">YouTube Topic channel releases</h2>
           <p className="text-sm text-[var(--color-fg-secondary)] mb-4">
-            Fetches recent uploads from each tracked artist&apos;s YouTube Topic channel and adds
+            Fetches recent uploads from each artist&apos;s YouTube Topic channel and adds
             them to the <strong>review queue as pending submissions</strong> — no auto-publish.
-            Also backfills missing artist profile images from YouTube channel thumbnails.
-            Costs ~1 quota unit per artist; safe to re-run (dedup by video ID).
+            Skips artists already ingested; each run advances to the next un-ingested batch.
+            Also backfills missing artist profile images. Costs ~1 quota unit per artist.
           </p>
+
+          {/* Batch controls */}
+          <div className="flex flex-wrap items-center gap-4 mb-4">
+            <div>
+              <span className={labelClass}>Batch size</span>
+              <div className="flex items-center gap-1.5 mt-1">
+                {[10, 20, 50].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setYtLimit(n)}
+                    disabled={ytPhase === 'running'}
+                    className={`text-xs font-semibold rounded-[var(--radius)] px-3 py-1.5 border transition-colors disabled:opacity-40 ${
+                      ytLimit === n
+                        ? 'border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
+                        : 'border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)]'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer mt-5">
+              <input
+                type="checkbox"
+                checked={ytTrackedOnly}
+                onChange={(e) => setYtTrackedOnly(e.target.checked)}
+                disabled={ytPhase === 'running'}
+                className="w-4 h-4 accent-[var(--color-accent)]"
+              />
+              <span className="text-sm text-[var(--color-fg-primary)]">Tracked artists only</span>
+            </label>
+          </div>
+
           <button
             type="button"
             onClick={runYouTubeTopic}
             disabled={running || ytPhase === 'running'}
             className="bg-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold rounded-[var(--radius)] px-5 py-3 hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-50"
           >
-            {ytPhase === 'running' ? 'Ingesting…' : 'Ingest YouTube releases (Topic)'}
+            {ytPhase === 'running' ? 'Ingesting…' : `Ingest YouTube releases (next ${ytLimit}${ytTrackedOnly ? ', tracked' : ''})`}
           </button>
 
           {ytPhase === 'done' && ytResult && (
             <div className="mt-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
-                <Metric label="Artists scanned" value={ytResult.artistsScanned} />
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs mb-3">
+                <Metric label="Artists processed" value={ytResult.artistsScanned} />
                 <Metric label="Images backfilled" value={ytResult.imagesBackfilled} accent />
                 <Metric label="Inserted" value={ytResult.inserted} accent />
                 <Metric label="Duplicates" value={ytResult.duplicates} />
                 <Metric label="Errors" value={ytResult.errors.length} error={ytResult.errors.length > 0} />
               </div>
+              {ytResult.artistsProcessed.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-xs font-semibold text-[var(--color-fg-tertiary)] mb-1">Per-artist</div>
+                  <div className="max-h-40 overflow-auto rounded-[var(--radius-sm)] bg-[var(--color-bg-base)] p-2 text-xs text-[var(--color-fg-secondary)] font-mono space-y-1">
+                    {ytResult.artistsProcessed.map((a, i) => (
+                      <div key={i}>
+                        <span className="text-[var(--color-fg-primary)]">{a.name}</span>
+                        <span className="text-[var(--color-fg-tertiary)]"> · </span>
+                        <span className={a.inserted > 0 ? 'text-[var(--color-accent)]' : ''}>
+                          +{a.inserted} inserted
+                        </span>
+                        <span className="text-[var(--color-fg-tertiary)]"> · {a.duplicates} dupes</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {ytResult.errors.length > 0 && (
                 <NoteList
                   title={`Errors (${ytResult.errors.length})`}

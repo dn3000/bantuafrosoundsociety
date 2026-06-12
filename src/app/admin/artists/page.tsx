@@ -17,7 +17,11 @@ type Artist = {
   updated_at: string
   last_scanned_at: string | null
   spotify_artist_id: string | null
+  youtube_topic_channel_id: string | null
+  youtube_channel_id: string | null
 }
+
+type YtChannelFilter = '' | 'has_topic' | 'has_oac' | 'unresolved'
 
 type Toast = { kind: 'info' | 'success' | 'error'; msg: string }
 
@@ -160,11 +164,29 @@ export default function ArtistsListPage() {
   // Which artist's YT resolution panel is open (at most one at a time).
   const [ytOpenId, setYtOpenId] = useState<string | null>(null)
 
+  // Client-side YT channel filter (applied to the loaded page, no refetch).
+  const [ytFilter, setYtFilter] = useState<YtChannelFilter>('')
+
+  // Fetched channel titles keyed by channel ID. Populated on-demand by
+  // "Fetch channel titles"; accumulates across pages as a lightweight cache.
+  const [channelTitles, setChannelTitles] = useState<Record<string, string>>({})
+  const [titlesLoading, setTitlesLoading] = useState(false)
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const showingFrom = total === 0 ? 0 : page * PAGE_SIZE + 1
   const showingTo = Math.min(total, (page + 1) * PAGE_SIZE)
 
-  const visibleIds = artists.map((a) => a.id)
+  // Client-side YT filter applied on top of the server-paged artists list.
+  const ytFilteredArtists = ytFilter
+    ? artists.filter((a) => {
+        if (ytFilter === 'has_topic') return !!a.youtube_topic_channel_id
+        if (ytFilter === 'has_oac') return !!a.youtube_channel_id
+        if (ytFilter === 'unresolved') return !a.youtube_topic_channel_id && !a.youtube_channel_id
+        return true
+      })
+    : artists
+
+  const visibleIds = ytFilteredArtists.map((a) => a.id)
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id))
   const someVisibleSelected = visibleIds.some((id) => selectedIds.has(id))
   const selectedCount = selectedIds.size
@@ -267,6 +289,35 @@ export default function ArtistsListPage() {
       }
     } finally {
       setSelecting(false)
+    }
+  }
+
+  // POST the visible (filtered) artists' channel IDs to the batch-title endpoint.
+  // On-demand only; never auto-fires. Accumulates into channelTitles cache.
+  async function fetchChannelTitles() {
+    const ids = [
+      ...new Set(
+        ytFilteredArtists.flatMap((a) =>
+          ([a.youtube_topic_channel_id, a.youtube_channel_id] as (string | null)[]).filter(
+            (id): id is string => !!id,
+          ),
+        ),
+      ),
+    ]
+    if (ids.length === 0) return
+    setTitlesLoading(true)
+    try {
+      const res = await fetch('/api/admin/youtube/channel-titles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelIds: ids }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.titles) {
+        setChannelTitles((prev) => ({ ...prev, ...data.titles }))
+      }
+    } finally {
+      setTitlesLoading(false)
     }
   }
 
@@ -446,7 +497,7 @@ export default function ArtistsListPage() {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
           <input
             type="search"
             placeholder="Search by name…"
@@ -481,6 +532,17 @@ export default function ArtistsListPage() {
           >
             <option value="updated_desc">Recently updated</option>
             <option value="scanned_asc_nulls_first">Least recently scanned</option>
+          </select>
+          <select
+            value={ytFilter}
+            onChange={(e) => setYtFilter(e.target.value as YtChannelFilter)}
+            aria-label="YouTube channel filter"
+            className="bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-3 py-2 text-[var(--color-fg-primary)] focus:border-[var(--color-border-strong)] transition-colors"
+          >
+            <option value="">All (YT)</option>
+            <option value="has_topic">Has Topic channel</option>
+            <option value="has_oac">Has OAC</option>
+            <option value="unresolved">Unresolved (no Topic, no OAC)</option>
           </select>
         </div>
 
@@ -556,8 +618,27 @@ export default function ArtistsListPage() {
               </div>
             )}
 
+            {/* Fetch channel titles — on-demand, never auto-fires */}
+            {ytFilteredArtists.some((a) => a.youtube_topic_channel_id || a.youtube_channel_id) && (
+              <div className="flex items-center gap-3 mb-3 px-1">
+                <button
+                  type="button"
+                  onClick={fetchChannelTitles}
+                  disabled={titlesLoading}
+                  className="text-xs font-semibold rounded-[var(--radius)] px-3 py-1.5 border border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {titlesLoading ? 'Fetching titles…' : 'Fetch channel titles'}
+                </button>
+                {Object.keys(channelTitles).length > 0 && (
+                  <span className="text-[10px] text-[var(--color-fg-tertiary)]">
+                    {Object.keys(channelTitles).length} titles cached
+                  </span>
+                )}
+              </div>
+            )}
+
             <ul className="space-y-2">
-              {artists.map((artist) => {
+              {ytFilteredArtists.map((artist) => {
                 const selected = selectedIds.has(artist.id)
                 const scan = scanStatus[artist.id] ?? { kind: 'idle' as const }
                 const hasSpotifyId = !!artist.spotify_artist_id
@@ -633,6 +714,44 @@ export default function ArtistsListPage() {
                           </button>
                         </div>
                         <ScanRowStatusChip status={scan} lastScannedAt={artist.last_scanned_at} />
+                        {(artist.youtube_topic_channel_id || artist.youtube_channel_id) && (
+                          <div className="flex flex-col items-end gap-0.5 mt-0.5">
+                            <div className="flex items-center gap-2">
+                              {artist.youtube_topic_channel_id && (
+                                <a
+                                  href={`https://music.youtube.com/channel/${artist.youtube_topic_channel_id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-[var(--color-fg-tertiary)] hover:text-[var(--color-accent)] transition-colors"
+                                >
+                                  Topic ↗
+                                </a>
+                              )}
+                              {artist.youtube_channel_id && (
+                                <a
+                                  href={`https://www.youtube.com/channel/${artist.youtube_channel_id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-[var(--color-fg-tertiary)] hover:text-[var(--color-accent)] transition-colors"
+                                >
+                                  OAC ↗
+                                </a>
+                              )}
+                            </div>
+                            {artist.youtube_topic_channel_id &&
+                              channelTitles[artist.youtube_topic_channel_id] && (
+                                <span className="text-[9px] font-mono text-[var(--color-fg-tertiary)] truncate max-w-[160px]">
+                                  {channelTitles[artist.youtube_topic_channel_id]}
+                                </span>
+                              )}
+                            {artist.youtube_channel_id &&
+                              channelTitles[artist.youtube_channel_id] && (
+                                <span className="text-[9px] font-mono text-[var(--color-fg-tertiary)] truncate max-w-[160px]">
+                                  {channelTitles[artist.youtube_channel_id]}
+                                </span>
+                              )}
+                          </div>
+                        )}
                       </div>
                     </div>
                     {ytOpenId === artist.id && (
