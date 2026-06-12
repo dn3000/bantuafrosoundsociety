@@ -12,7 +12,7 @@ export default async function EditArticlePage({
 
   const { data, error } = await supabase
     .from('articles')
-    .select('id, kind, title, slug, dek, cover_image_url, tags, author, body, status')
+    .select('id, kind, title, slug, dek, cover_image_url, tags, author, body, excerpt, commentary, source_url, source_name, status')
     .eq('id', id)
     .single()
 
@@ -22,6 +22,7 @@ export default async function EditArticlePage({
     <ArticleForm
       initial={{
         id: data.id,
+        kind: data.kind as 'original' | 'link',
         title: data.title,
         slug: data.slug,
         dek: data.dek ?? '',
@@ -29,6 +30,10 @@ export default async function EditArticlePage({
         tags: (data.tags as string[]).join(', '),
         author: data.author,
         body: data.body ?? '',
+        excerpt: data.excerpt ?? '',
+        commentary: data.commentary ?? '',
+        source_url: data.source_url ?? '',
+        source_name: data.source_name ?? '',
         status: data.status as 'draft' | 'published' | 'archived',
       }}
     />

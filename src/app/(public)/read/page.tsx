@@ -15,12 +15,17 @@ type ArticleRow = {
   title: string
   slug: string
   dek: string | null
+  excerpt: string | null
+  source_name: string | null
   cover_image_url: string | null
   author: string
   published_at: string | null
 }
 
 function ArticleCard({ article }: { article: ArticleRow }) {
+  const isLink = article.kind === 'link'
+  const subtitle = article.dek || article.excerpt || null
+
   return (
     <Link
       href={`/read/${article.slug}`}
@@ -45,14 +50,23 @@ function ArticleCard({ article }: { article: ArticleRow }) {
 
       {/* Content */}
       <div className="p-4 flex flex-col flex-1">
+        {/* "via Source" tag for link cards */}
+        {isLink && article.source_name && (
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-accent)] mb-1.5">
+            via {article.source_name}
+          </p>
+        )}
+
         <h2 className="font-heading font-bold text-base text-[var(--color-fg-primary)] leading-snug mb-1.5 group-hover:text-[var(--color-accent)] transition-colors">
           {article.title}
         </h2>
-        {article.dek && (
+
+        {subtitle && (
           <p className="text-xs text-[var(--color-fg-secondary)] leading-relaxed mb-3 line-clamp-2">
-            {article.dek}
+            {subtitle}
           </p>
         )}
+
         <div className="mt-auto flex items-center gap-1.5 text-[10px] text-[var(--color-fg-tertiary)] uppercase tracking-wider">
           <span>{article.author}</span>
           {article.published_at && (
@@ -78,7 +92,7 @@ export default async function ReadPage() {
 
   const { data, error } = await supabase
     .from('articles')
-    .select('id, kind, title, slug, dek, cover_image_url, author, published_at')
+    .select('id, kind, title, slug, dek, excerpt, source_name, cover_image_url, author, published_at')
     .eq('status', 'published')
     .order('published_at', { ascending: false, nullsFirst: false })
     .limit(48)
@@ -88,7 +102,6 @@ export default async function ReadPage() {
   return (
     <div className="px-4 sm:px-6 py-8 max-w-5xl mx-auto">
       <header className="mb-10">
-        {/* "→ READ" section header style */}
         <h1 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-6 flex items-center gap-1.5">
           <span className="text-[var(--color-accent)]" aria-hidden>→</span>
           Read
