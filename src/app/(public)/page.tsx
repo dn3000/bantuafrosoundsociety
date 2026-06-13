@@ -11,41 +11,61 @@ const SAMPLE_HERO_ITEMS: HeroCarouselItem[] = [
   {
     id: 'sample-1',
     type: 'release',
-    title: 'Azonto Flux',
-    subtitle: 'Ebo Taylor Jr.',
+    kicker: 'Editors Pick',
+    headline: 'Shannen SP curates South African electronic underground compilation for TraTraTrax',
     imageUrl: 'https://picsum.photos/seed/bass1/520/680',
+    typeBadge: 'Album',
+    title: 'TraTraTrax',
+    artist: 'Shannen SP',
+    date: '05 June 2026',
     href: '/explore',
   },
   {
     id: 'sample-2',
     type: 'playlist',
-    title: 'West African Night Moves',
-    subtitle: 'Curated by BASS Collective',
+    kicker: 'New Playlist',
+    headline: 'West African night moves — 90 minutes of Afrobeats, Highlife and deep house to close the week',
     imageUrl: 'https://picsum.photos/seed/bass2/520/680',
+    typeBadge: 'Playlist',
+    title: 'West African Night Moves',
+    artist: 'BASS Collective',
+    date: '07 June 2026',
     href: '/explore',
   },
   {
     id: 'sample-3',
     type: 'video',
-    title: 'Live at Alliance Française',
-    subtitle: 'Afrobeats Session #14',
+    kicker: 'Live Session',
+    headline: 'Watch the full Afrobeats Session #14 — live at Alliance Française, Lagos',
     imageUrl: 'https://picsum.photos/seed/bass3/520/680',
+    typeBadge: 'Video',
+    title: 'Live at Alliance Française',
+    artist: 'Various Artists',
+    date: '01 June 2026',
     href: '/watch',
   },
   {
     id: 'sample-4',
     type: 'article',
-    title: 'The New Wave of Afro-Fusion: What 2026 Sounds Like',
-    subtitle: 'Feature · 8 min read',
+    kicker: 'Feature',
+    headline: 'The new wave of Afro-fusion: producers and vocalists reshaping the sound in 2026',
     imageUrl: 'https://picsum.photos/seed/bass4/520/680',
+    typeBadge: 'Article',
+    title: 'The New Wave of Afro-Fusion',
+    artist: 'BASS Editorial',
+    date: '03 June 2026',
     href: '/read',
   },
   {
     id: 'sample-5',
     type: 'release',
-    title: 'Kinshasa Echoes',
-    subtitle: 'BASS × Congo Square',
+    kicker: 'New Release',
+    headline: 'Kinshasa Echoes arrives — a collaboration between BASS and the Congo Square collective',
     imageUrl: 'https://picsum.photos/seed/bass5/520/680',
+    typeBadge: 'EP',
+    title: 'Kinshasa Echoes',
+    artist: 'BASS × Congo Square',
+    date: '10 June 2026',
     href: '/explore',
   },
 ]
@@ -496,7 +516,7 @@ export default async function HomePage() {
   return (
     <div className="px-4 sm:px-6 py-8 max-w-5xl mx-auto">
       {/* ── HERO CAROUSEL (H1 sample data — replaced in H2) ─────────────── */}
-      <HeroCarousel items={SAMPLE_HERO_ITEMS} caption="Listen to BASS" />
+      <HeroCarousel items={SAMPLE_HERO_ITEMS} />
 
       {!hasContent && (
         <p className="text-[var(--color-fg-tertiary)] text-sm text-center mt-24">
