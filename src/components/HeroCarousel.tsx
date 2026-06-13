@@ -261,8 +261,8 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
           if (Math.abs(rel) > 1) return null
 
           const isActive = rel === 0
-          // rel=-1 → off-screen left, rel=0 → active, rel=+1 → peek right
-          const tx = rel === -1 ? '-100%' : rel === 0 ? '0%' : '100%'
+          // rel=-1 → off-screen left, rel=0 → active, rel=+1 → peek right (12px gap)
+          const tx = rel === -1 ? 'calc(-100% - 12px)' : rel === 0 ? '0%' : 'calc(100% + 12px)'
 
           return (
             <div
@@ -372,6 +372,7 @@ function TypeBadge({
     <span
       style={{
         display: 'inline-block',
+        width: 'fit-content',
         fontSize: small ? '0.5625rem' : '0.625rem',
         fontWeight: 700,
         letterSpacing: '0.08em',
