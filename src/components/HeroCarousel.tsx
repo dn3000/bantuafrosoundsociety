@@ -122,8 +122,9 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
                 className="absolute inset-0"
                 style={{
                   opacity: idx === active ? 1 : 0,
+                  transform: idx === active ? 'scale(1)' : 'scale(1.04)',
                   zIndex: idx === active ? 1 : 0,
-                  transition: noMotion ? 'none' : 'opacity 420ms ease',
+                  transition: noMotion ? 'none' : 'opacity 550ms ease, transform 550ms ease',
                 }}
                 aria-hidden={idx !== active}
               >
@@ -271,7 +272,7 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
               style={{
                 width: '80%',
                 transform: `translateX(${tx})`,
-                transition: noMotion ? 'none' : 'transform 360ms cubic-bezier(0.4,0,0.2,1)',
+                transition: noMotion ? 'none' : 'transform 420ms cubic-bezier(0.22,1,0.36,1)',
                 pointerEvents: isActive ? 'auto' : 'none',
               }}
               role="group"

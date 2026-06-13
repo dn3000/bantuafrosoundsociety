@@ -4,15 +4,15 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
-  House, Compass, Search, Users, Menu,
+  House, User, Heart, Music2, Menu,
   ChevronDown, X, BookOpen, Calendar, ShoppingBag, Info, Tv, LogIn,
 } from 'lucide-react'
 
 const PRIMARY = [
-  { href: '/', label: 'Home', Icon: House },
-  { href: '/explore', label: 'Explore', Icon: Compass },
-  { href: '/search', label: 'Search', Icon: Search },
-  { href: '/artists', label: 'Artists', Icon: Users },
+  { href: '/profile', label: 'Profile', Icon: User   },
+  { href: '/saved',   label: 'Saved',   Icon: Heart  },
+  { href: '/',        label: 'Home',    Icon: House  },
+  { href: '/search',  label: 'Explore', Icon: Music2 },
 ] as const
 
 const MORE = [
