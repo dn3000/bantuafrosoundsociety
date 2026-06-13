@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
-  House, User, Heart, Music2, Menu,
+  House, User, Heart, Music4, Menu,
   ChevronDown, X, BookOpen, Calendar, ShoppingBag, Info, Tv, LogIn,
 } from 'lucide-react'
 
@@ -12,7 +12,7 @@ const PRIMARY = [
   { href: '/profile', label: 'Profile', Icon: User   },
   { href: '/saved',   label: 'Saved',   Icon: Heart  },
   { href: '/',        label: 'Home',    Icon: House  },
-  { href: '/search',  label: 'Explore', Icon: Music2 },
+  { href: '/search',  label: 'Explore', Icon: Music4 },
 ] as const
 
 const MORE = [
