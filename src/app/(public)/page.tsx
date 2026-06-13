@@ -6,6 +6,11 @@ import { createClient } from '@/lib/supabase/server'
 import { CardCarousel, type CarouselItem } from '@/components/CardCarousel'
 import { VideoCarousel, type VideoCarouselItem } from '@/components/VideoCarousel'
 import { HeroCarousel, type HeroCarouselItem } from '@/components/HeroCarousel'
+import {
+  MobileGenrePills,
+  MobileBassSelect,
+  MobileReleasesRow,
+} from '@/components/MobileHomeSections'
 
 // ── TEMPORARY sample data — replaced with real CMS data in H2 ────────────────
 const SAMPLE_HERO_ITEMS: HeroCarouselItem[] = [
@@ -518,6 +523,11 @@ export default async function HomePage() {
     <div className="px-4 sm:px-6 py-8 max-w-5xl mx-auto">
       {/* ── HERO CAROUSEL (H1 sample data — replaced in H2) ─────────────── */}
       <HeroCarousel items={SAMPLE_HERO_ITEMS} />
+
+      {/* ── MOBILE-ONLY (md:hidden) — Slice B sample sections ───────────── */}
+      <MobileGenrePills />
+      <MobileBassSelect />
+      <MobileReleasesRow />
 
       {!hasContent && (
         <p className="text-[var(--color-fg-tertiary)] text-sm text-center mt-24">
