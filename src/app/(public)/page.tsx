@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import { ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { CardCarousel, type CarouselItem } from '@/components/CardCarousel'
 import { VideoCarousel, type VideoCarouselItem } from '@/components/VideoCarousel'
@@ -560,9 +561,12 @@ export default async function HomePage() {
         <section className="mb-14 space-y-6">
           {editorialSections.map((item) => (
             <div key={item.slot.id}>
-              <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-2 flex items-center gap-1.5">
+              <h2
+                className="font-bold mb-2 flex items-center gap-1"
+                style={{ fontFamily: 'var(--font-heading)', fontSize: '0.9375rem', color: 'var(--color-fg-primary)' }}
+              >
                 {item.slot.display_name}
-                <span className="text-[var(--color-accent)]" aria-hidden>→</span>
+                <ChevronRight size={14} className="text-[var(--color-accent)]" aria-hidden="true" />
               </h2>
               {item.ref_type === 'article' ? (
                 <Link
@@ -625,9 +629,12 @@ export default async function HomePage() {
       {/* ── READ ────────────────────────────────────────────────────────── */}
       {(pickReadArticle || readItems.length > 0) && (
         <section className="mb-14">
-          <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
+          <h2
+            className="font-bold mb-4 flex items-center gap-1"
+            style={{ fontFamily: 'var(--font-heading)', fontSize: '0.9375rem', color: 'var(--color-fg-primary)' }}
+          >
             Read
-            <span className="text-[var(--color-accent)]" aria-hidden>→</span>
+            <ChevronRight size={14} className="text-[var(--color-accent)]" aria-hidden="true" />
           </h2>
 
           {/* Editor's Pick featured lead card */}
@@ -700,9 +707,12 @@ export default async function HomePage() {
       {/* ── LATEST APPROVED ──────────────────────────────────────────────── */}
       {recent.length > 0 && (
         <section>
-          <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
+          <h2
+            className="font-bold mb-4 flex items-center gap-1"
+            style={{ fontFamily: 'var(--font-heading)', fontSize: '0.9375rem', color: 'var(--color-fg-primary)' }}
+          >
             Latest
-            <span className="text-[var(--color-accent)]" aria-hidden>→</span>
+            <ChevronRight size={14} className="text-[var(--color-accent)]" aria-hidden="true" />
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {recent.map((sub) => (

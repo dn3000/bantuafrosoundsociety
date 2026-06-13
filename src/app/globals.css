@@ -103,3 +103,19 @@ h1, h2, h3, h4, h5, h6 {
 .font-mono {
   font-family: var(--font-mono);
 }
+
+/* ── Mobile header platform marquee ─────────────────────────────────────── */
+@keyframes bass-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.bass-marquee-track {
+  animation: bass-marquee 22s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bass-marquee-track {
+    animation: none;
+  }
+}

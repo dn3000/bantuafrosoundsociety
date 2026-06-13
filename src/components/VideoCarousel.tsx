@@ -6,6 +6,7 @@
 //                   CardCarousel, with identical section-label style.
 
 import Link from 'next/link'
+import { ChevronRight } from 'lucide-react'
 
 export type VideoCarouselItem = {
   id: string
@@ -107,9 +108,12 @@ export function VideoCarousel({
   return (
     <section className={className}>
       {/* "TITLE →" section-label style used across the homepage */}
-      <h2 className="text-[10px] uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4 flex items-center gap-1.5">
+      <h2
+        className="font-bold mb-4 flex items-center gap-1"
+        style={{ fontFamily: 'var(--font-heading)', fontSize: '0.9375rem', color: 'var(--color-fg-primary)' }}
+      >
         {title}
-        <span className="text-[var(--color-accent)]" aria-hidden>→</span>
+        <ChevronRight size={14} className="text-[var(--color-accent)]" aria-hidden="true" />
       </h2>
 
       {/* Horizontally scrollable track: scroll-snap, scrollbar hidden */}

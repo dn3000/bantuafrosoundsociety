@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   House, Compass, Search, Users, Menu,
-  ChevronDown, X, BookOpen, Calendar, ShoppingBag, Info, Tv,
+  ChevronDown, X, BookOpen, Calendar, ShoppingBag, Info, Tv, LogIn,
 } from 'lucide-react'
 
 const PRIMARY = [
@@ -183,7 +183,7 @@ export function PublicNav() {
               </button>
             </div>
 
-            <ul className="px-3 pb-10 space-y-0.5">
+            <ul className="px-3 pb-3 space-y-0.5">
               {MORE.map(({ href, label, Icon }) => {
                 const active = isActive(pathname, href)
                 return (
@@ -205,6 +205,18 @@ export function PublicNav() {
                 )
               })}
             </ul>
+
+            {/* Sign in — separated from nav links */}
+            <div className="px-3 pb-10 pt-1 border-t border-white/10">
+              <Link
+                href="/admin/login"
+                onClick={() => setSheetOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-[var(--radius)] text-base font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-subtle)] transition-colors"
+              >
+                <LogIn size={20} strokeWidth={1.5} />
+                Sign In
+              </Link>
+            </div>
           </div>
         </>
       )}
