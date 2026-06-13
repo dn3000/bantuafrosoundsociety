@@ -17,10 +17,8 @@ export type HeroCarouselItem = {
 }
 
 const AUTO_MS = 5500
-// Visible sliver width (px) from the adjacent image on mobile
-const MOB_SLIVER = 28
 
-// Shortest-path wrapped relative position — unchanged from original
+// Shortest-path wrapped relative position — unchanged
 function wrapRel(idx: number, active: number, n: number): number {
   const raw = idx - active
   const half = Math.floor(n / 2)
@@ -32,14 +30,13 @@ function wrapRel(idx: number, active: number, n: number): number {
 export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
   const n = items.length
 
-  // ── State (interaction logic unchanged from original) ─────────────────────
+  // ── State & interaction logic — all unchanged ─────────────────────────────
   const [active, setActive] = useState(0)
   const [paused, setPaused] = useState(false)
   const [noMotion, setNoMotion] = useState(false)
   const dragX = useRef<number | null>(null)
 
-  // Text crossfade: `displayActive` lags ~170 ms behind `active` so text
-  // fades out before updating, then fades back in.
+  // Text crossfade: displayActive lags 170 ms so right column fades out first
   const [displayActive, setDisplayActive] = useState(0)
   const [textOpacity, setTextOpacity] = useState(1)
 
@@ -53,14 +50,12 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
 
   const go = useCallback((dir: 1 | -1) => setActive(i => (i + dir + n) % n), [n])
 
-  // Auto-rotate — unchanged from original
   useEffect(() => {
     if (paused || noMotion) return
     const id = setInterval(() => go(1), AUTO_MS)
     return () => clearInterval(id)
   }, [paused, noMotion, go])
 
-  // Text crossfade when active changes
   useEffect(() => {
     if (noMotion) { setDisplayActive(active); return }
     setTextOpacity(0)
@@ -69,9 +64,8 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
   }, [active, noMotion])
 
   const cur = items[displayActive]
-  const curHref = items[active].href  // image link tracks `active`, not `displayActive`
+  const curHref = items[active].href
 
-  // Shared section event props — interaction logic unchanged from original
   const interact = {
     onMouseEnter: () => setPaused(true),
     onMouseLeave: () => setPaused(false),
@@ -103,9 +97,9 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
       {...interact}
     >
 
-      {/* ═══════════════════════════════════════════
+      {/* ═══════════════════════════════════════════════════════════════════
           DESKTOP  md+  — two-column editorial panel
-          ═══════════════════════════════════════════ */}
+          ═══════════════════════════════════════════════════════════════════ */}
       <div
         className="hidden md:flex rounded-[var(--radius-lg)] overflow-hidden"
         style={{ background: 'var(--color-bg-elevated)', minHeight: 390 }}
@@ -113,11 +107,13 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
         aria-atomic="false"
       >
 
-        {/* Left ½ — image crossfade stack */}
-        <div className="relative flex-shrink-0" style={{ width: '48%' }}>
+        {/* Left ½ — inset image with rounded corners */}
+        <div className="flex-shrink-0 flex p-3" style={{ width: '48%' }}>
+          {/* Link wraps the rounded image frame; ring renders inside the frame */}
           <Link
             href={curHref}
-            className="block absolute inset-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]"
+            className="flex-1 relative focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]"
+            style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', display: 'block' }}
             aria-label={`Open ${items[active].title}`}
           >
             {items.map((item, idx) => (
@@ -143,10 +139,10 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
           </Link>
         </div>
 
-        {/* Right ½ — text block + NEXT strip */}
+        {/* Right ½ — text + NEXT strip */}
         <div className="flex-1 flex flex-col min-w-0 p-5 gap-4">
 
-          {/* Text block (fades with displayActive) */}
+          {/* Active item text block — crossfades with displayActive */}
           <div className="flex flex-col gap-2" style={fadeStyle}>
             <p
               className="text-[10px] uppercase tracking-[0.12em] font-semibold"
@@ -166,7 +162,7 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
                 {cur.headline}
               </h2>
             </Link>
-            <div className="flex flex-col gap-0.5 mt-0.5">
+            <div className="flex flex-col gap-0.5 mt-1">
               <TypeBadge>{cur.typeBadge}</TypeBadge>
               <p
                 className="font-bold text-sm leading-snug"
@@ -189,22 +185,19 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
             </div>
           </div>
 
-          {/* Spacer pushes divider + NEXT strip to the bottom */}
+          {/* Spacer */}
           <div className="flex-1" />
 
           {/* Divider */}
-          <div
-            className="h-px flex-shrink-0"
-            style={{ background: 'var(--color-border-subtle)' }}
-          />
+          <div className="h-px flex-shrink-0" style={{ background: 'var(--color-border-default)' }} />
 
-          {/* NEXT strip — updates with `active` (inside the fade div) */}
+          {/* NEXT strip — no arrow, three evenly-sized cards */}
           <div style={fadeStyle}>
             <p
               className="text-[9px] uppercase tracking-[0.12em] font-bold mb-2.5"
               style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-sans)' }}
             >
-              NEXT →
+              NEXT
             </p>
             <div className="flex gap-2.5">
               {[1, 2, 3].map(offset => {
@@ -213,31 +206,31 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
                   <Link
                     key={`next-${offset}`}
                     href={item.href}
-                    className="flex-1 min-w-0 group focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
+                    className="flex-1 min-w-0 group focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)] rounded-[8px]"
                     role="group"
                     aria-roledescription="slide"
                     aria-label={`${offset + 1} ahead: ${item.title}`}
                   >
                     <div
-                      className="overflow-hidden mb-1"
+                      className="overflow-hidden mb-1.5 group-hover:opacity-80 transition-opacity duration-[var(--animate-fast)]"
                       style={{ borderRadius: 8, aspectRatio: '1 / 1' }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={item.imageUrl}
                         alt={item.title}
-                        className="w-full h-full object-cover group-hover:opacity-75 transition-opacity duration-[var(--animate-fast)]"
+                        className="w-full h-full object-cover"
                         loading="lazy"
                       />
                     </div>
                     <p
-                      className="text-[11px] font-semibold leading-tight line-clamp-2 mb-0.5"
+                      className="text-[11px] font-semibold leading-snug line-clamp-2 mb-0.5"
                       style={{ color: 'var(--color-fg-primary)', fontFamily: 'var(--font-sans)' }}
                     >
                       {item.title}
                     </p>
                     <p
-                      className="text-[10px] mb-1"
+                      className="text-[10px] mb-1.5"
                       style={{ color: 'var(--color-fg-tertiary)', fontFamily: 'var(--font-sans)' }}
                     >
                       {item.date}
@@ -251,118 +244,130 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════
-          MOBILE  below md  — centered vertical stack
-          ═══════════════════════════════════════════ */}
-      <div className="md:hidden" aria-live="polite" aria-atomic="false">
+      {/* ═══════════════════════════════════════════════════════════════════
+          MOBILE  below md  — left-anchored whole-card carousel, right peek
+          Card width = 80% of container. Image = square (100% of card width =
+          80% of container width). Container height = padding-bottom formula:
+            80% (image) + 165px (kicker+headline+below-image text+gaps).
+          ═══════════════════════════════════════════════════════════════════ */}
+      <div
+        className="md:hidden relative overflow-hidden"
+        style={{ height: 0, paddingBottom: 'calc(80% + 165px)' }}
+        aria-live="polite"
+        aria-atomic="false"
+      >
+        {items.map((item, idx) => {
+          const rel = wrapRel(idx, active, n)
+          if (Math.abs(rel) > 1) return null
 
-        {/* Kicker + headline */}
-        <div className="text-center mb-3 px-2" style={fadeStyle}>
-          <p
-            className="text-[9px] uppercase tracking-[0.12em] font-semibold mb-1.5"
-            style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-sans)' }}
-          >
-            {cur.kicker}
-          </p>
-          <h2
-            className="font-bold leading-snug line-clamp-3"
-            style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: '0.9375rem',
-              color: 'var(--color-fg-primary)',
-            }}
-          >
-            {cur.headline}
-          </h2>
-        </div>
+          const isActive = rel === 0
+          // rel=-1 → off-screen left, rel=0 → active, rel=+1 → peek right
+          const tx = rel === -1 ? '-100%' : rel === 0 ? '0%' : '100%'
 
-        {/* Image strip — darkened slivers of adjacent items on each edge */}
-        <div className="relative overflow-hidden mb-3" style={{ aspectRatio: '1 / 1' }}>
-          {items.map((item, idx) => {
-            const rel = wrapRel(idx, active, n)
-            if (Math.abs(rel) > 1) return null
-            const isActive = rel === 0
-            const tx = isActive
-              ? '0px'
-              : rel < 0
-                ? `calc(-100% + ${MOB_SLIVER}px)`
-                : `calc(100% - ${MOB_SLIVER}px)`
-            return (
-              <div
-                key={item.id}
-                className="absolute inset-0"
-                style={{
-                  transform: `translateX(${tx})`,
-                  filter: isActive ? 'none' : 'brightness(0.32)',
-                  transition: noMotion
-                    ? 'none'
-                    : 'transform 360ms cubic-bezier(0.4,0,0.2,1)',
-                  zIndex: isActive ? 1 : 0,
-                }}
-                role="group"
-                aria-roledescription="slide"
-                aria-label={`${idx + 1} of ${n}: ${item.title}`}
-                aria-hidden={!isActive}
-              >
-                {isActive ? (
-                  <Link
-                    href={item.href}
-                    className="block w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={item.imageUrl}
-                      alt={item.title}
-                      className="w-full h-full object-cover object-top"
-                      loading="eager"
-                    />
-                  </Link>
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.imageUrl}
-                    alt=""
-                    className="w-full h-full object-cover object-top"
-                    loading="lazy"
-                  />
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Title + artist + date + badge */}
-        <div className="text-center px-4" style={fadeStyle}>
-          <p
-            className="font-bold text-sm leading-snug mb-0.5"
-            style={{ color: 'var(--color-fg-primary)', fontFamily: 'var(--font-heading)' }}
-          >
-            {cur.title}
-          </p>
-          <p
-            className="text-sm mb-1.5"
-            style={{ color: 'var(--color-fg-secondary)', fontFamily: 'var(--font-sans)' }}
-          >
-            {cur.artist}
-          </p>
-          <div className="flex items-center justify-center gap-2">
-            <span
-              className="text-xs"
-              style={{ color: 'var(--color-fg-tertiary)', fontFamily: 'var(--font-sans)' }}
+          return (
+            <div
+              key={item.id}
+              className="absolute top-0 left-0"
+              style={{
+                width: '80%',
+                transform: `translateX(${tx})`,
+                transition: noMotion ? 'none' : 'transform 360ms cubic-bezier(0.4,0,0.2,1)',
+                pointerEvents: isActive ? 'auto' : 'none',
+              }}
+              role="group"
+              aria-roledescription="slide"
+              aria-label={`${idx + 1} of ${n}: ${item.headline}`}
+              aria-hidden={!isActive}
             >
-              {cur.date}
-            </span>
-            <TypeBadge small>{cur.typeBadge}</TypeBadge>
-          </div>
-        </div>
+              {/* Kicker */}
+              <p
+                className="text-[9px] uppercase tracking-[0.12em] font-semibold mb-1.5"
+                style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-sans)' }}
+              >
+                {item.kicker}
+              </p>
+
+              {/* Headline — 2-line clamp */}
+              <p
+                className="font-bold leading-snug line-clamp-2 mb-2.5"
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontSize: '0.875rem',
+                  color: 'var(--color-fg-primary)',
+                }}
+              >
+                {item.headline}
+              </p>
+
+              {/* Square image — filled typeBadge overlaid bottom-left */}
+              <Link
+                href={item.href}
+                className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-base)]"
+                style={{
+                  display: 'block',
+                  position: 'relative',
+                  width: '100%',
+                  aspectRatio: '1 / 1',
+                  borderRadius: 'var(--radius-md)',
+                  overflow: 'hidden',
+                }}
+                tabIndex={isActive ? 0 : -1}
+                aria-label={`Open ${item.title}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.imageUrl}
+                  alt={item.title}
+                  className="w-full h-full object-cover object-top"
+                  loading={isActive ? 'eager' : 'lazy'}
+                />
+                {/* Filled pill on image — legible against any cover art */}
+                <div className="absolute bottom-3 left-3">
+                  <TypeBadge variant="filled">{item.typeBadge}</TypeBadge>
+                </div>
+              </Link>
+
+              {/* Below-image metadata — left-aligned */}
+              <p
+                className="font-bold text-sm leading-snug mt-2 mb-0.5"
+                style={{ color: 'var(--color-fg-primary)', fontFamily: 'var(--font-heading)' }}
+              >
+                {item.title}
+              </p>
+              <p
+                className="text-sm leading-snug mb-0.5"
+                style={{ color: 'var(--color-fg-secondary)', fontFamily: 'var(--font-sans)' }}
+              >
+                {item.artist}
+              </p>
+              <p
+                className="text-xs"
+                style={{ color: 'var(--color-fg-tertiary)', fontFamily: 'var(--font-sans)' }}
+              >
+                {item.date}
+              </p>
+            </div>
+          )
+        })}
       </div>
     </section>
   )
 }
 
-// ── TypeBadge pill ────────────────────────────────────────────────────────────
+// ── TypeBadge pill ─────────────────────────────────────────────────────────────
+// variant="outline" (default) — terracotta border + text, transparent fill
+// variant="filled"            — solid terracotta, white text (for on-image use)
 
-function TypeBadge({ children, small }: { children: React.ReactNode; small?: boolean }) {
+function TypeBadge({
+  children,
+  variant = 'outline',
+  small,
+}: {
+  children: React.ReactNode
+  variant?: 'outline' | 'filled'
+  small?: boolean
+}) {
+  const filled = variant === 'filled'
   return (
     <span
       style={{
@@ -371,13 +376,14 @@ function TypeBadge({ children, small }: { children: React.ReactNode; small?: boo
         fontWeight: 700,
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
-        background: 'var(--color-accent)',
-        color: 'var(--color-fg-primary)',
+        background: filled ? 'var(--color-accent)' : 'transparent',
+        color: filled ? 'var(--color-fg-primary)' : 'var(--color-accent)',
+        border: filled ? 'none' : '1.5px solid var(--color-accent)',
         borderRadius: 'var(--radius-full)',
         paddingLeft: small ? 6 : 8,
         paddingRight: small ? 6 : 8,
-        paddingTop: 2,
-        paddingBottom: 2,
+        paddingTop: filled ? 2 : 1,
+        paddingBottom: filled ? 2 : 1,
         lineHeight: 1.4,
         fontFamily: 'var(--font-sans)',
       }}
