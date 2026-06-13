@@ -18,27 +18,19 @@ export type HeroCarouselItem = {
 
 const AUTO_MS = 5500
 
-// Shortest-path wrapped relative position — unchanged
-function wrapRel(idx: number, active: number, n: number): number {
-  const raw = idx - active
-  const half = Math.floor(n / 2)
-  if (raw > half) return raw - n
-  if (raw < -half) return raw + n
-  return raw
-}
-
 export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
   const n = items.length
 
-  // ── State & interaction logic — all unchanged ─────────────────────────────
   const [active, setActive] = useState(0)
   const [paused, setPaused] = useState(false)
   const [noMotion, setNoMotion] = useState(false)
-  const dragX = useRef<number | null>(null)
 
-  // Text crossfade: displayActive lags 170 ms so right column fades out first
+  // Desktop text crossfade: displayActive lags 170 ms so right col fades out first
   const [displayActive, setDisplayActive] = useState(0)
   const [textOpacity, setTextOpacity] = useState(1)
+
+  // Mobile scroll container ref
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -50,12 +42,19 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
 
   const go = useCallback((dir: 1 | -1) => setActive(i => (i + dir + n) % n), [n])
 
-  useEffect(() => {
-    if (paused || noMotion) return
-    const id = setInterval(() => go(1), AUTO_MS)
-    return () => clearInterval(id)
-  }, [paused, noMotion, go])
+  // Desktop: hover / focus / keyboard
+  const desktopInteract = {
+    onMouseEnter: () => setPaused(true),
+    onMouseLeave: () => setPaused(false),
+    onFocus:      () => setPaused(true),
+    onBlur:       () => setPaused(false),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); go(-1) }
+      if (e.key === 'ArrowRight') { e.preventDefault(); go(1)  }
+    },
+  }
 
+  // Desktop text crossfade
   useEffect(() => {
     if (noMotion) { setDisplayActive(active); return }
     setTextOpacity(0)
@@ -63,27 +62,66 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
     return () => clearTimeout(t)
   }, [active, noMotion])
 
+  // Unified auto-advance: mobile scrolls natively, desktop uses go(1)
+  useEffect(() => {
+    if (paused || noMotion) return
+    const id = setInterval(() => {
+      const el = scrollRef.current
+      const isMobile = window.innerWidth < 768
+      if (isMobile && el) {
+        const cw = el.offsetWidth * 0.8 + 12
+        el.scrollTo({ left: el.scrollLeft + cw, behavior: 'smooth' })
+      } else {
+        go(1)
+      }
+    }, AUTO_MS)
+    return () => clearInterval(id)
+  }, [paused, noMotion, go])
+
+  // Mobile: skip past the left clone on mount so item[0] is shown first
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollLeft = el.offsetWidth * 0.8 + 12
+  }, [])
+
+  // Mobile: scrollend → handle infinite-loop jump + sync active index
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    let tid: ReturnType<typeof setTimeout>
+
+    const onEnd = () => {
+      const cw = el.offsetWidth * 0.8 + 12
+      const idx = Math.round(el.scrollLeft / cw)
+      if (idx <= 0) {
+        // Snapped to left clone (copy of last item) → jump to real last
+        el.scrollLeft = n * cw
+        setActive(n - 1)
+      } else if (idx >= n + 1) {
+        // Snapped to right clone (copy of first item) → jump to real first
+        el.scrollLeft = cw
+        setActive(0)
+      } else {
+        setActive(idx - 1)
+      }
+    }
+
+    if ('onscrollend' in window) {
+      el.addEventListener('scrollend', onEnd)
+      return () => el.removeEventListener('scrollend', onEnd)
+    }
+    // Fallback: debounced scroll event
+    const onScroll = () => { clearTimeout(tid); tid = setTimeout(onEnd, 150) }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => { el.removeEventListener('scroll', onScroll); clearTimeout(tid) }
+  }, [n])
+
+  // [clone-of-last, item0, item1, …, itemN-1, clone-of-first]
+  const clonedItems = [items[n - 1], ...items, items[0]]
+
   const cur = items[displayActive]
   const curHref = items[active].href
-
-  const interact = {
-    onMouseEnter: () => setPaused(true),
-    onMouseLeave: () => setPaused(false),
-    onFocus:      () => setPaused(true),
-    onBlur:       () => setPaused(false),
-    onTouchStart: (e: React.TouchEvent) => { dragX.current = e.touches[0].clientX },
-    onTouchEnd:   (e: React.TouchEvent) => {
-      if (dragX.current === null) return
-      const dx = e.changedTouches[0].clientX - dragX.current
-      dragX.current = null
-      if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1)
-    },
-    onKeyDown: (e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowLeft')  { e.preventDefault(); go(-1) }
-      if (e.key === 'ArrowRight') { e.preventDefault(); go(1)  }
-    },
-  }
-
   const fadeStyle = {
     opacity: textOpacity,
     transition: noMotion ? 'none' : 'opacity 170ms ease',
@@ -94,11 +132,11 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
       className="mb-14"
       aria-label="Featured content"
       aria-roledescription="carousel"
-      {...interact}
+      {...desktopInteract}
     >
 
       {/* ═══════════════════════════════════════════════════════════════════
-          DESKTOP  md+  — two-column editorial panel
+          DESKTOP  md+  — two-column editorial panel (unchanged)
           ═══════════════════════════════════════════════════════════════════ */}
       <div
         className="hidden md:flex rounded-[var(--radius-lg)] overflow-hidden"
@@ -107,9 +145,8 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
         aria-atomic="false"
       >
 
-        {/* Left ½ — inset image with rounded corners */}
+        {/* Left ½ — image with pull-focus scale transition */}
         <div className="flex-shrink-0 flex p-3" style={{ width: '48%' }}>
-          {/* Link wraps the rounded image frame; ring renders inside the frame */}
           <Link
             href={curHref}
             className="flex-1 relative focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]"
@@ -143,7 +180,6 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
         {/* Right ½ — text + NEXT strip */}
         <div className="flex-1 flex flex-col min-w-0 p-5 gap-4">
 
-          {/* Active item text block — crossfades with displayActive */}
           <div className="flex flex-col gap-2" style={fadeStyle}>
             <p
               className="text-[10px] uppercase tracking-[0.12em] font-semibold"
@@ -186,13 +222,10 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
             </div>
           </div>
 
-          {/* Spacer */}
           <div className="flex-1" />
-
-          {/* Divider */}
           <div className="h-px flex-shrink-0" style={{ background: 'var(--color-border-default)' }} />
 
-          {/* NEXT strip — no arrow, three evenly-sized cards */}
+          {/* NEXT strip */}
           <div style={fadeStyle}>
             <p
               className="text-[9px] uppercase tracking-[0.12em] font-bold mb-2.5"
@@ -246,38 +279,38 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          MOBILE  below md  — left-anchored whole-card carousel, right peek
-          Card width = 80% of container. Image = square (100% of card width =
-          80% of container width). Container height = padding-bottom formula:
-            80% (image) + 165px (kicker+headline+below-image text+gaps).
+          MOBILE  below md  — CSS scroll-snap swipe carousel
+          Cards live in a real horizontal scroll container so swiping moves
+          all of them simultaneously — no pop-in, no crossfade, full scrub.
+          Layout: [clone-last │ item0 │ item1 … │ clone-first]
+          scrollend snaps the clones back to their real counterparts.
           ═══════════════════════════════════════════════════════════════════ */}
       <div
-        className="md:hidden relative overflow-hidden"
-        style={{ height: 0, paddingBottom: 'calc(80% + 165px)' }}
+        ref={scrollRef}
+        className="md:hidden flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{
+          overflowX: 'scroll',
+          scrollSnapType: 'x mandatory',
+          WebkitOverflowScrolling: 'touch',
+          gap: 12,
+        }}
+        onTouchStart={() => setPaused(true)}
+        onTouchEnd={() => setPaused(false)}
         aria-live="polite"
         aria-atomic="false"
       >
-        {items.map((item, idx) => {
-          const rel = wrapRel(idx, active, n)
-          if (Math.abs(rel) > 1) return null
-
-          const isActive = rel === 0
-          // rel=-1 → off-screen left, rel=0 → active, rel=+1 → peek right (12px gap)
-          const tx = rel === -1 ? 'calc(-100% - 12px)' : rel === 0 ? '0%' : 'calc(100% + 12px)'
+        {clonedItems.map((item, i) => {
+          const isClone = i === 0 || i === clonedItems.length - 1
+          const realIdx = i === 0 ? n - 1 : i === clonedItems.length - 1 ? 0 : i - 1
+          const isActive = !isClone && active === realIdx
 
           return (
             <div
-              key={item.id}
-              className="absolute top-0 left-0"
-              style={{
-                width: '80%',
-                transform: `translateX(${tx})`,
-                transition: noMotion ? 'none' : 'transform 420ms cubic-bezier(0.22,1,0.36,1)',
-                pointerEvents: isActive ? 'auto' : 'none',
-              }}
-              role="group"
-              aria-roledescription="slide"
-              aria-label={`${idx + 1} of ${n}: ${item.headline}`}
+              key={`${item.id}-${i}`}
+              style={{ width: '80%', flexShrink: 0, scrollSnapAlign: 'start' }}
+              role={isClone ? undefined : 'group'}
+              aria-roledescription={isClone ? undefined : 'slide'}
+              aria-label={isClone ? undefined : `${realIdx + 1} of ${n}: ${item.headline}`}
               aria-hidden={!isActive}
             >
               {/* Kicker */}
@@ -288,7 +321,7 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
                 {item.kicker}
               </p>
 
-              {/* Headline — 2-line clamp */}
+              {/* Headline */}
               <p
                 className="font-bold leading-snug line-clamp-2 mb-2.5"
                 style={{
@@ -300,7 +333,7 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
                 {item.headline}
               </p>
 
-              {/* Square image — filled typeBadge overlaid bottom-left */}
+              {/* Square image + badge */}
               <Link
                 href={item.href}
                 className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-base)]"
@@ -322,13 +355,12 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
                   className="w-full h-full object-cover object-top"
                   loading={isActive ? 'eager' : 'lazy'}
                 />
-                {/* Filled pill on image — legible against any cover art */}
                 <div className="absolute bottom-3 left-3">
                   <TypeBadge variant="filled">{item.typeBadge}</TypeBadge>
                 </div>
               </Link>
 
-              {/* Below-image metadata — left-aligned */}
+              {/* Metadata below image */}
               <p
                 className="font-bold text-sm leading-snug mt-2 mb-0.5"
                 style={{ color: 'var(--color-fg-primary)', fontFamily: 'var(--font-heading)' }}
@@ -355,10 +387,7 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
   )
 }
 
-// ── TypeBadge pill ─────────────────────────────────────────────────────────────
-// variant="outline" (default) — terracotta border + text, transparent fill
-// variant="filled"            — solid terracotta, white text (for on-image use)
-
+// ── TypeBadge ─────────────────────────────────────────────────────────────────
 function TypeBadge({
   children,
   variant = 'outline',

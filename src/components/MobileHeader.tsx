@@ -117,7 +117,10 @@ export function MobileHeader() {
              Inner: overflow-x:auto — naturally swipeable; JS drives auto-scroll. */
           <div
             className="overflow-hidden"
-            style={{ maskImage: 'linear-gradient(to right, transparent, black 18%, black 100%)' }}
+            style={{
+              maskImage: 'linear-gradient(to right, transparent, black 18%, black 100%)',
+              WebkitMaskImage: 'linear-gradient(to right, transparent, black 18%, black 100%)',
+            }}
           >
             <div
               ref={trackRef}
