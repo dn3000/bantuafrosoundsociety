@@ -1,100 +1,80 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { X } from 'lucide-react'
 
-const STORAGE_KEY = 'bass_banner_dismissed'
+// TODO: re-enable localStorage persistence before production launch.
+// Banner always reappears on reload during development/testing.
 
-// TODO before production: replace each badge with the platform's official
-// "Listen on" lockup per Apple Music Identity Guidelines, Spotify Brand
-// Guidelines, YouTube Music Brand Guidelines, and SoundCloud Creator Resources.
-const PLATFORMS: { name: string; href: string; color: string }[] = [
-  { name: 'Apple Music',   href: 'https://music.apple.com',   color: '#FC3C44' },
-  { name: 'Spotify',       href: 'https://open.spotify.com',  color: '#1DB954' },
-  { name: 'YouTube Music', href: 'https://music.youtube.com', color: '#FF0000' },
-  { name: 'SoundCloud',    href: 'https://soundcloud.com',    color: '#FF5500' },
+// Official streaming badge lockups from /public/brand/.
+// TODO: verify each platform's brand guidelines before launch.
+const PLATFORMS = [
+  { name: 'Spotify',       href: 'https://open.spotify.com',  src: '/brand/2024_Spotify_Logo.svg',  cls: 'h-6'  },
+  { name: 'Apple Music',   href: 'https://music.apple.com',   src: '/brand/Apple_Music_logo.svg',   cls: 'h-6'  },
+  { name: 'YouTube Music', href: 'https://music.youtube.com', src: '/brand/YouTube_Music_logo.svg', cls: 'h-6'  },
+  { name: 'SoundCloud',    href: 'https://soundcloud.com',    src: '/brand/Soundcloud_logo.svg',    cls: 'h-4'  },
 ]
 
 export function MobileHeader() {
-  const [dismissed, setDismissed] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    setDismissed(localStorage.getItem(STORAGE_KEY) === 'true')
-  }, [])
-
-  function dismiss() {
-    localStorage.setItem(STORAGE_KEY, 'true')
-    setDismissed(true)
-  }
-
-  // Render nothing until localStorage is read to avoid SSR/hydration flicker
-  if (dismissed === null) return null
+  const [dismissed, setDismissed] = useState(false)
 
   return (
     <header
-      className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center gap-3 px-4"
-      style={{
-        height: 56,
-        background: 'var(--color-bg-elevated)',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-      }}
+      className="md:hidden flex items-center gap-4 px-5"
+      style={{ minHeight: 112 }}
     >
-      {/* BASS logo — swap src if you place the SVG at a different path */}
+      {/* Square brand mark — /brand/logo-mark.svg */}
       <Link href="/" className="flex-shrink-0" aria-label="BASS home">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/logo.svg" alt="BASS" className="h-7 w-auto" loading="eager" />
+        <img src="/brand/logo-mark.svg" alt="BASS" className="h-14 w-auto" loading="eager" />
       </Link>
 
       {/* Hairline separator */}
       <div
         className="flex-shrink-0 self-stretch"
-        style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '10px 0' }}
+        style={{ width: 1, background: 'rgba(255,255,255,0.12)', margin: '14px 0' }}
         aria-hidden="true"
       />
 
-      {/* Right region: dismissable promo banner → platform badge marquee */}
+      {/* Right region — promo banner → platform badge marquee */}
       <div className="flex-1 min-w-0 overflow-hidden">
         {!dismissed ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <p
-              className="text-[11px] leading-tight line-clamp-2 flex-1 min-w-0"
+              className="text-sm leading-snug flex-1 min-w-0"
               style={{ fontFamily: 'var(--font-sans)', color: 'var(--color-fg-secondary)' }}
             >
               <span style={{ color: 'var(--color-accent)', fontWeight: 700 }}>WIN TICKETS</span>
               {' '}to: Black Coffee — July 6, 2026
             </p>
             <button
-              onClick={dismiss}
+              onClick={() => setDismissed(true)}
               aria-label="Dismiss banner"
-              className="flex-shrink-0 p-1 rounded-full text-[var(--color-fg-tertiary)] hover:text-[var(--color-fg-primary)] hover:bg-white/10 transition-colors"
+              className="flex-shrink-0 p-1.5 rounded-full text-[var(--color-fg-tertiary)] hover:text-[var(--color-fg-primary)] hover:bg-white/10 transition-colors"
             >
-              <X size={14} />
+              <X size={18} />
             </button>
           </div>
         ) : (
-          /* Fade edges mask so badges glide in/out smoothly */
+          /* Edges fade out so logos glide smoothly in/out */
           <div
             className="overflow-hidden"
-            style={{ maskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)' }}
+            style={{ maskImage: 'linear-gradient(to right, transparent, black 6%, black 94%, transparent)' }}
           >
-            {/* Double the list so the -50% translateX loops seamlessly */}
-            <div className="flex gap-3 items-center bass-marquee-track">
+            <div className="flex gap-8 items-center bass-marquee-track">
+              {/* List doubled so the -50% translateX loops seamlessly */}
               {[...PLATFORMS, ...PLATFORMS].map((p, i) => (
                 <Link
                   key={i}
                   href={p.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-shrink-0 whitespace-nowrap text-[11px] font-semibold px-2.5 py-1 rounded-full hover:opacity-75 transition-opacity"
-                  style={{
-                    color: p.color,
-                    border: `1px solid ${p.color}55`,
-                    background: `${p.color}1A`,
-                    fontFamily: 'var(--font-sans)',
-                  }}
+                  className="flex-shrink-0 hover:opacity-70 transition-opacity"
+                  aria-label={`Listen on ${p.name}`}
                 >
-                  {p.name}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.src} alt={p.name} className={`${p.cls} w-auto`} loading="lazy" />
                 </Link>
               ))}
             </div>
