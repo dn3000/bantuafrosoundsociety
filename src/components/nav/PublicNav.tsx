@@ -118,11 +118,24 @@ export function PublicNav() {
       </nav>
 
       {/* ── Mobile bottom tab bar ───────────────────────── */}
+      <style>{`
+        .glass-nav-mobile {
+          background: rgba(18, 18, 18, 0.92);
+        }
+        @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+          .glass-nav-mobile {
+            background: rgba(18, 18, 18, 0.55);
+            backdrop-filter: blur(18px) saturate(1.4);
+            -webkit-backdrop-filter: blur(18px) saturate(1.4);
+          }
+        }
+      `}</style>
       <nav
         aria-label="Main navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[var(--color-bg-elevated)] border-t border-white/10"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
+        className="glass-nav-mobile md:hidden fixed left-4 right-4 z-40 rounded-[24px] border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
       >
-        <ul className="flex h-14">
+        <ul className="flex h-14 px-2">
           {PRIMARY.map(({ href, label, Icon }) => {
             const active = isActive(pathname, href)
             return (
