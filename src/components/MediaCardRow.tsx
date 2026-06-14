@@ -32,13 +32,14 @@ export function MediaCardRow({
   /** Chevron "see all" target. */
   href: string
   items: MediaCardItem[]
-  aspect?: 'square' | 'video'
+  aspect?: 'square' | 'video' | 'portrait'
   /** Tailwind width class for each card. */
   cardWidth?: string
 }) {
   if (items.length === 0) return null
 
-  const aspectClass = aspect === 'video' ? 'aspect-video' : 'aspect-square'
+  const aspectClass =
+    aspect === 'video' ? 'aspect-video' : aspect === 'portrait' ? 'aspect-[3/4]' : 'aspect-square'
 
   return (
     <section className="md:hidden mb-10">

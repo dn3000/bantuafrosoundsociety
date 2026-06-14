@@ -205,3 +205,30 @@ export function MobileBassSets() {
     />
   )
 }
+
+// ── ARTIST SPOTLIGHT ─────────────────────────────────────────────────────────
+// Hand-picked "artists to watch" — replaces the old auto Trending Artists row
+// on mobile. Editorial, not algorithmic. 3:4 portrait covers.
+// TEMPORARY sample data — replaced once the editorial artist picks backend lands.
+
+const SAMPLE_ARTIST_SPOTLIGHT: MediaCardItem[] = [
+  // TODO route → artists index — individual hrefs stub to "#"
+  { id: 'as-1', title: 'Lebo Khoza',        subtitle: 'Soweto · Afro Tech',       imageUrl: 'https://picsum.photos/seed/as-lebo/400/533',   href: '#' },
+  { id: 'as-2', title: 'Thandi Mbeki',      subtitle: 'Pretoria · Soulful House', imageUrl: 'https://picsum.photos/seed/as-thandi/400/533', href: '#' },
+  { id: 'as-3', title: 'DJ Sipho',          subtitle: 'Durban · Gqom',            imageUrl: 'https://picsum.photos/seed/as-sipho/400/533',  href: '#' },
+  { id: 'as-4', title: 'Tumi Mokoena',      subtitle: 'Cape Town · Amapiano',     imageUrl: 'https://picsum.photos/seed/as-tumi/400/533',   href: '#' },
+  { id: 'as-5', title: 'Nala Khumalo',      subtitle: 'Joburg · Deep House',      imageUrl: 'https://picsum.photos/seed/as-nala/400/533',   href: '#' },
+  { id: 'as-6', title: 'Sello Mahlangu',    subtitle: 'Mamelodi · 3 Step',        imageUrl: 'https://picsum.photos/seed/as-sello/400/533',  href: '#' },
+]
+
+export function MobileArtistSpotlight() {
+  return (
+    <MediaCardRow
+      title="Artist Spotlight"
+      href="#" // TODO route → artists index
+      items={SAMPLE_ARTIST_SPOTLIGHT}
+      aspect="portrait"
+      cardWidth="w-[40vw]"
+    />
+  )
+}

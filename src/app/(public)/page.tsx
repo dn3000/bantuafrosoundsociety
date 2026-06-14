@@ -11,6 +11,7 @@ import {
   MobileBassMade,
   MobileBassThisWeek,
   MobileBassSets,
+  MobileArtistSpotlight,
 } from '@/components/MobileHomeSections'
 
 // ── TEMPORARY sample data — replaced with real CMS data in H2 ────────────────
@@ -530,6 +531,7 @@ export default async function HomePage() {
       <MobileBassMade />
       <MobileBassThisWeek />
       <MobileBassSets />
+      <MobileArtistSpotlight />
 
       {!hasContent && (
         <p className="text-[var(--color-fg-tertiary)] text-sm text-center mt-24">
@@ -699,8 +701,10 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── TRENDING ARTISTS CAROUSEL ────────────────────────────────────── */}
-      <CardCarousel title="Trending Artists" items={trendingArtistItems} rows={1} shape="circle" className="mb-14" />
+      {/* ── TRENDING ARTISTS CAROUSEL (desktop only — mobile uses Artist Spotlight) ── */}
+      <div className="hidden md:block">
+        <CardCarousel title="Trending Artists" items={trendingArtistItems} rows={1} shape="circle" className="mb-14" />
+      </div>
 
       {/* ── NEW ALBUMS CAROUSEL ──────────────────────────────────────────── */}
       <CardCarousel title="New Albums" items={newAlbumItems} rows={1} className="mb-14" />
