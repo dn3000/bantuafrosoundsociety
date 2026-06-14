@@ -1,10 +1,12 @@
-// Reusable mobile-only horizontal artwork carousel — used by BASS Made and
-// the other artwork-card sections coming in later slices. Server component:
-// pure CSS scroll-snap, cards are <Link>s, no client JS.
+// Reusable horizontal artwork carousel — used by BASS Made, BASS Sets,
+// Artist Spotlight, Podcasts, Events. Server component: pure CSS
+// scroll-snap, cards are <Link>s, no client JS.
 //
-// Layout matches the other mobile rows: SectionTitle (title + chevron), then
-// a horizontal snap track using the shared SCROLL_TRACK utility so the first
-// card aligns flush with the section title under the page's px-4 gutter.
+// Renders on both breakpoints; the responsive sizing is driven by the
+// `cardWidth` prop (callers pass a mobile→md pair, e.g. "w-[42vw] md:w-44").
+// SectionTitle sits above a horizontal snap track using the shared
+// SCROLL_TRACK utility so the first card aligns flush with the title
+// under the page's px-4 sm:px-6 gutter.
 
 import Link from 'next/link'
 import { SectionTitle } from './SectionTitle'
@@ -42,7 +44,7 @@ export function MediaCardRow({
     aspect === 'video' ? 'aspect-video' : aspect === 'portrait' ? 'aspect-[3/4]' : 'aspect-square'
 
   return (
-    <section className="md:hidden mb-10">
+    <section className="mb-10 md:mb-14">
       {/* SectionTitle is an h2 — wrap it in a Link for the "see all" tap target. */}
       <Link href={href} className="block">
         <SectionTitle title={title} />

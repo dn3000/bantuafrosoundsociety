@@ -1,12 +1,8 @@
-// Mobile-only homepage sections (md:hidden):
-//   MobileGenrePills    — horizontal scroll of photo-card genre tiles, no section title.
-//   MobileBassMade      — in-house playlist row ("BASS Made ›"), built on MediaCardRow.
-//   MobileBassThisWeek  — paged columns of stacked track rows ("BASS This Week ›") with date sub-line.
-//
-// Server components — pure CSS scroll-snap, no client JS. Front-end only this
-// slice: sample data is TEMPORARY and gets swapped out once each section's
-// backend lands. Desktop layout is unaffected — every export wraps itself in
-// md:hidden.
+// Homepage sample sections — rendered at both breakpoints. Mobile sizing
+// is vw-based for peek-overflow; desktop sizing uses pixel widths (or
+// max-widths for the non-scrolling lists). Server components — pure CSS
+// scroll-snap, no client JS. Sample data is TEMPORARY and gets swapped out
+// once each section's backend lands.
 
 import Link from 'next/link'
 import { MoreHorizontal } from 'lucide-react'
@@ -35,7 +31,7 @@ const SAMPLE_GENRES: SampleGenre[] = [
 
 export function MobileGenrePills() {
   return (
-    <div className={`md:hidden mb-8 flex gap-3 snap-x ${SCROLL_TRACK}`}>
+    <div className={`mb-8 md:mb-14 flex gap-3 snap-x ${SCROLL_TRACK}`}>
       {SAMPLE_GENRES.map((genre) => (
         <div
           key={genre.name}
@@ -83,7 +79,7 @@ export function MobileBassMade() {
       href="#" // TODO route
       items={SAMPLE_BASS_MADE}
       aspect="square"
-      cardWidth="w-[42vw]"
+      cardWidth="w-[42vw] md:w-44"
     />
   )
 }
@@ -161,12 +157,12 @@ export function MobileBassThisWeek() {
   if (columns.length === 0) return null
 
   return (
-    <section className="md:hidden mb-10">
+    <section className="mb-10 md:mb-14">
       <SectionTitle title="BASS This Week" className="mb-1" />
       <p className="text-xs text-white/50 mb-3">{BASS_THIS_WEEK_DATE}</p>
       <div className={`flex gap-3 snap-x snap-mandatory ${SCROLL_TRACK}`}>
         {columns.map((col, ci) => (
-          <div key={ci} className="shrink-0 snap-start w-[80vw]">
+          <div key={ci} className="shrink-0 snap-start w-[80vw] md:w-[26rem]">
             {col.map((track, ri) => (
               <BassThisWeekRow
                 key={track.id}
@@ -202,7 +198,7 @@ export function MobileBassSets() {
       href="#" // TODO route
       items={SAMPLE_BASS_SETS}
       aspect="video"
-      cardWidth="w-[62vw]"
+      cardWidth="w-[62vw] md:w-72"
     />
   )
 }
@@ -229,7 +225,7 @@ export function MobileArtistSpotlight() {
       href="#" // TODO route → artists index
       items={SAMPLE_ARTIST_SPOTLIGHT}
       aspect="portrait"
-      cardWidth="w-[40vw]"
+      cardWidth="w-[40vw] md:w-44"
     />
   )
 }
@@ -255,7 +251,7 @@ export function MobilePodcasts() {
       href="#" // TODO route
       items={SAMPLE_PODCASTS}
       aspect="video"
-      cardWidth="w-[62vw]"
+      cardWidth="w-[62vw] md:w-72"
     />
   )
 }
@@ -353,13 +349,13 @@ function ChartRow({ track, showDivider }: { track: ChartTrack; showDivider: bool
 export function MobileCharts() {
   if (SAMPLE_CHART_TRACKS.length === 0) return null
   return (
-    <section className="md:hidden mb-10">
+    <section className="mb-10 md:mb-14">
       <Link href="#" className="block">
         {/* TODO route → /charts */}
         <SectionTitle title="Charts" className="mb-1" />
       </Link>
       <p className="text-xs text-white/50 mb-3">{CHARTS_SUBLINE}</p>
-      <div>
+      <div className="md:max-w-2xl">
         {SAMPLE_CHART_TRACKS.map((track, i) => (
           <ChartRow
             key={track.rank}
@@ -393,7 +389,7 @@ export function MobileEvents() {
       href="#" // TODO route
       items={SAMPLE_EVENTS}
       aspect="portrait"
-      cardWidth="w-[52vw]"
+      cardWidth="w-[52vw] md:w-52"
     />
   )
 }
