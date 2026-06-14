@@ -393,3 +393,29 @@ export function MobileEvents() {
     />
   )
 }
+
+// ── BUY MERCH ────────────────────────────────────────────────────────────────
+// Square product cards with Rand prices in the subtitle slot.
+// TEMPORARY sample data — replaced once the merch backend lands.
+
+const SAMPLE_MERCH: MediaCardItem[] = [
+  // TODO route — individual hrefs stub to "#"
+  { id: 'mr-1', title: 'BASS Logo Tee',       subtitle: 'R350', imageUrl: 'https://picsum.photos/seed/mr-tee/400/400',     href: '#' },
+  { id: 'mr-2', title: 'Embroidered Cap',     subtitle: 'R250', imageUrl: 'https://picsum.photos/seed/mr-cap/400/400',     href: '#' },
+  { id: 'mr-3', title: 'Tour Hoodie',         subtitle: 'R750', imageUrl: 'https://picsum.photos/seed/mr-hoodie/400/400',  href: '#' },
+  { id: 'mr-4', title: 'Canvas Tote',         subtitle: 'R200', imageUrl: 'https://picsum.photos/seed/mr-tote/400/400',    href: '#' },
+  { id: 'mr-5', title: 'Sticker Pack',        subtitle: 'R80',  imageUrl: 'https://picsum.photos/seed/mr-stickers/400/400', href: '#' },
+  { id: 'mr-6', title: 'Knit Beanie',         subtitle: 'R220', imageUrl: 'https://picsum.photos/seed/mr-beanie/400/400',  href: '#' },
+]
+
+export function MobileMerch() {
+  return (
+    <MediaCardRow
+      title="Buy Merch"
+      href="#" // TODO route
+      items={SAMPLE_MERCH}
+      aspect="square"
+      cardWidth="w-[42vw] md:w-44"
+    />
+  )
+}

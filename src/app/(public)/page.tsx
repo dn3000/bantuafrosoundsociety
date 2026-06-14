@@ -15,7 +15,9 @@ import {
   MobilePodcasts,
   MobileCharts,
   MobileEvents,
+  MobileMerch,
 } from '@/components/MobileHomeSections'
+import { SiteFooter } from '@/components/SiteFooter'
 
 // ── TEMPORARY sample data — replaced with real CMS data in H2 ────────────────
 const SAMPLE_HERO_ITEMS: HeroCarouselItem[] = [
@@ -348,6 +350,12 @@ export default async function HomePage() {
           <CardCarousel items={readItems} rows={1} shape="square" />
         </section>
       )}
+
+      {/* 15. Buy Merch (sample) */}
+      <MobileMerch />
+
+      {/* 16. Site footer */}
+      <SiteFooter />
     </div>
   )
 }
