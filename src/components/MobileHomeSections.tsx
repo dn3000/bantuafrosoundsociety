@@ -16,31 +16,49 @@ import { SectionTitle } from './SectionTitle'
 const SCROLL_TRACK =
   'overflow-x-auto scroll-smooth py-1 -mx-4 px-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
 
-// ── GENRE PILLS ──────────────────────────────────────────────────────────────
-// TEMPORARY: pills are display-only until the genre filter backend lands.
-// TODO: wire each pill to a genre filter once the backend is in place.
+// ── GENRE IMAGE CARDS ────────────────────────────────────────────────────────
+// Horizontal carousel of photo tiles, each labelled with the genre name.
+// TEMPORARY: photos are picsum placeholders + cards are display-only until the
+// genre filter backend lands. Swap photos for real genre art and wire each
+// card to a filter at that point.
 
-const SAMPLE_GENRES = [
-  'Amapiano',
-  'Gqom',
-  '3 Step',
-  'Afro House',
-  'Deep House',
-  'Afro Tech',
-  'Soulful House',
-  'Bacardi',
+type SampleGenre = { name: string; cover: string }
+
+const SAMPLE_GENRES: SampleGenre[] = [
+  { name: 'Amapiano',      cover: 'https://picsum.photos/seed/genre-amapiano/300/180'  },
+  { name: 'Gqom',          cover: 'https://picsum.photos/seed/genre-gqom/300/180'      },
+  { name: '3 Step',        cover: 'https://picsum.photos/seed/genre-3step/300/180'     },
+  { name: 'Afro House',    cover: 'https://picsum.photos/seed/genre-afrohouse/300/180' },
+  { name: 'Deep House',    cover: 'https://picsum.photos/seed/genre-deephouse/300/180' },
+  { name: 'Afro Tech',     cover: 'https://picsum.photos/seed/genre-afrotech/300/180'  },
+  { name: 'Soulful House', cover: 'https://picsum.photos/seed/genre-soulful/300/180'   },
+  { name: 'Bacardi',       cover: 'https://picsum.photos/seed/genre-bacardi/300/180'   },
 ]
 
 export function MobileGenrePills() {
   return (
-    <div className={`md:hidden mb-8 flex gap-2 snap-x ${SCROLL_TRACK}`}>
+    <div className={`md:hidden mb-8 flex gap-3 snap-x ${SCROLL_TRACK}`}>
       {SAMPLE_GENRES.map((genre) => (
-        <span
-          key={genre}
-          className="shrink-0 snap-start rounded-full bg-white/8 px-4 py-2 text-sm text-[var(--color-fg-secondary)] whitespace-nowrap"
+        <div
+          key={genre.name}
+          className="relative shrink-0 snap-start w-[150px] h-[90px] rounded-[12px] overflow-hidden"
         >
-          {genre}
-        </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={genre.cover}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+          <span
+            className="absolute bottom-2 left-2.5 right-2.5 text-white text-sm font-bold leading-tight line-clamp-2"
+            style={{ fontFamily: 'var(--font-heading)' }}
+          >
+            {genre.name}
+          </span>
+        </div>
       ))}
     </div>
   )

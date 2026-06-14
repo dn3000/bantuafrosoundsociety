@@ -29,6 +29,15 @@ const SOCIALS = [
   { name: 'Threads',   href: '#', src: '/brand/threads.svg'   },
 ]
 
+// TEMPORARY: sample track. Replace cover/title/artist/href with real curated
+// pick once the Track of the Day backend lands.
+const TRACK_OF_THE_DAY = {
+  title:  'Sondela',
+  artist: 'DJ Stoks',
+  cover:  'https://picsum.photos/seed/totd/96/96',
+  href:   '/tracks/track-of-the-day',
+}
+
 export function MobileHeader() {
   const [dismissed, setDismissed] = useState(false)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -134,6 +143,42 @@ export function MobileHeader() {
               {/* Content doubled so the half-width loop reset is seamless */}
               {[0, 1].map(pass => (
                 <div key={pass} className="flex gap-6 items-center flex-shrink-0">
+
+                  {/* Track of the Day — leads the strip before platform badges */}
+                  <Link
+                    href={TRACK_OF_THE_DAY.href}
+                    className="flex-shrink-0 flex items-center gap-2 hover:opacity-80 transition-opacity"
+                    aria-label={`Track of the Day: ${TRACK_OF_THE_DAY.title} by ${TRACK_OF_THE_DAY.artist}`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={TRACK_OF_THE_DAY.cover}
+                      alt=""
+                      aria-hidden="true"
+                      className="w-12 h-12 rounded-[8px] object-cover flex-shrink-0"
+                      loading="eager"
+                    />
+                    <div className="min-w-0 flex flex-col justify-center max-w-[140px]">
+                      <span
+                        className="text-[9px] font-semibold uppercase tracking-widest whitespace-nowrap"
+                        style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-sans)' }}
+                      >
+                        Track of the Day
+                      </span>
+                      <span
+                        className="text-xs font-semibold leading-tight line-clamp-1"
+                        style={{ color: 'var(--color-fg-primary)', fontFamily: 'var(--font-sans)' }}
+                      >
+                        {TRACK_OF_THE_DAY.title}
+                      </span>
+                      <span
+                        className="text-[11px] leading-tight line-clamp-1"
+                        style={{ color: 'var(--color-fg-secondary)', fontFamily: 'var(--font-sans)' }}
+                      >
+                        {TRACK_OF_THE_DAY.artist}
+                      </span>
+                    </div>
+                  </Link>
 
                   {/* Streaming platform badges */}
                   {PLATFORMS.map(p => (
