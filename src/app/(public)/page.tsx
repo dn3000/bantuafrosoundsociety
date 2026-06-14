@@ -252,20 +252,43 @@ export default async function HomePage() {
 
   return (
     <div className="px-4 sm:px-6 py-8 max-w-5xl mx-auto">
-      {/* ── HERO CAROUSEL (H1 sample data — replaced in H2) ─────────────── */}
+      {/*
+        Canonical 1–14 order. Mobile-only rows (Mobile*) wrap themselves in
+        md:hidden; the real sections (Popular Playlists, Music Videos, Live
+        Sets, Mixes, Read) render on both breakpoints. Responsive parity for
+        the desktop ordering lands in Commit 2b.
+      */}
+
+      {/* 1. Hero */}
       <HeroCarousel items={SAMPLE_HERO_ITEMS} />
 
-      {/* ── MOBILE-ONLY (md:hidden) — Slice B sample sections ───────────── */}
+      {/* 2–6. Mobile-only Slice B intro */}
       <MobileGenrePills />
       <MobileBassMade />
       <MobileBassThisWeek />
       <MobileBassSets />
       <MobileArtistSpotlight />
+
+      {/* 7. Popular Playlists (real) */}
+      <CardCarousel title="Popular Playlists" items={playlistItems} rows={1} shape="square" className="mb-14" />
+
+      {/* 8. Music Videos (real) */}
+      <VideoCarousel title="Music Videos" items={musicVideoItems} className="mb-14" />
+
+      {/* 9. Podcasts (mobile-only sample) */}
       <MobilePodcasts />
+
+      {/* 10. Live Sets (real) */}
+      <VideoCarousel title="Live Sets" items={liveSetItems} className="mb-14" />
+
+      {/* 11. Mixes (real) */}
+      <VideoCarousel title="Mixes" items={mixItems} className="mb-14" />
+
+      {/* 12–13. Mobile-only Charts + Events */}
       <MobileCharts />
       <MobileEvents />
 
-      {/* ── READ ────────────────────────────────────────────────────────── */}
+      {/* 14. Read (real, with Editor's Pick lead) */}
       {(pickReadArticle || readItems.length > 0) && (
         <section className="mb-14">
           <h2
@@ -325,14 +348,6 @@ export default async function HomePage() {
           <CardCarousel items={readItems} rows={1} shape="square" />
         </section>
       )}
-
-      {/* ── PLAYLISTS CAROUSEL ──────────────────────────────────────────── */}
-      <CardCarousel title="Playlists" items={playlistItems} rows={1} shape="square" className="mb-14" />
-
-      {/* ── WATCH: VIDEO CAROUSELS ───────────────────────────────────────── */}
-      <VideoCarousel title="Mixes" items={mixItems} className="mb-14" />
-      <VideoCarousel title="Live Sets" items={liveSetItems} className="mb-14" />
-      <VideoCarousel title="Music Videos" items={musicVideoItems} className="mb-14" />
     </div>
   )
 }
