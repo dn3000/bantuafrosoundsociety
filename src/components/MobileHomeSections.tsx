@@ -234,58 +234,6 @@ export function MobileArtistSpotlight() {
   )
 }
 
-// ── POPULAR PLAYLISTS ────────────────────────────────────────────────────────
-// External (non-BASS) playlists trending on Spotify / Apple Music.
-// TEMPORARY sample data — replaced once the external-playlists feed lands.
-
-const SAMPLE_POPULAR_PLAYLISTS: MediaCardItem[] = [
-  // TODO route — individual hrefs stub to "#"
-  { id: 'pp-1', title: 'Afro House Heat',       subtitle: 'Spotify · 12k saves',     imageUrl: 'https://picsum.photos/seed/pp-heat/400/400',     href: '#' },
-  { id: 'pp-2', title: 'Cape Town Sunsets',     subtitle: 'Spotify · 8.4k saves',    imageUrl: 'https://picsum.photos/seed/pp-sunsets/400/400',  href: '#' },
-  { id: 'pp-3', title: 'Amapiano Essentials',   subtitle: 'Apple Music · 21k saves', imageUrl: 'https://picsum.photos/seed/pp-amapiano/400/400', href: '#' },
-  { id: 'pp-4', title: 'Lagos Drive',           subtitle: 'DJ Tunde',                imageUrl: 'https://picsum.photos/seed/pp-lagos/400/400',    href: '#' },
-  { id: 'pp-5', title: 'Township Hits 2026',    subtitle: 'Spotify · 6.2k saves',    imageUrl: 'https://picsum.photos/seed/pp-township/400/400', href: '#' },
-  { id: 'pp-6', title: 'Soulful Sundays',       subtitle: 'Apple Music · 14k saves', imageUrl: 'https://picsum.photos/seed/pp-soulful/400/400',  href: '#' },
-]
-
-export function MobilePopularPlaylists() {
-  return (
-    <MediaCardRow
-      title="Popular Playlists"
-      href="#" // TODO route
-      items={SAMPLE_POPULAR_PLAYLISTS}
-      aspect="square"
-      cardWidth="w-[42vw]"
-    />
-  )
-}
-
-// ── MUSIC VIDEOS ─────────────────────────────────────────────────────────────
-// External official music videos — 16:9 thumbs with track-length duration pill.
-// TEMPORARY sample data — replaced once the music-videos feed lands.
-
-const SAMPLE_MUSIC_VIDEOS: MediaCardItem[] = [
-  // TODO route — individual hrefs stub to "#"
-  { id: 'mv-1', title: 'Tyla – Water (Official Video)',                 subtitle: 'Tyla',        durationLabel: '3:54', imageUrl: 'https://picsum.photos/seed/mv-water/640/360',       href: '#' },
-  { id: 'mv-2', title: 'Burna Boy – City Boys (Official Video)',        subtitle: 'Burna Boy',   durationLabel: '4:12', imageUrl: 'https://picsum.photos/seed/mv-cityboys/640/360',    href: '#' },
-  { id: 'mv-3', title: 'Tems – Free Mind (Official Video)',             subtitle: 'Tems',        durationLabel: '3:38', imageUrl: 'https://picsum.photos/seed/mv-freemind/640/360',    href: '#' },
-  { id: 'mv-4', title: 'Davido – Unavailable (Official Video)',         subtitle: 'Davido',      durationLabel: '3:46', imageUrl: 'https://picsum.photos/seed/mv-unavailable/640/360', href: '#' },
-  { id: 'mv-5', title: 'Asake – Lonely at the Top (Official Video)',    subtitle: 'Asake',       durationLabel: '2:54', imageUrl: 'https://picsum.photos/seed/mv-lonely/640/360',      href: '#' },
-  { id: 'mv-6', title: 'Rema – Calm Down (Official Video)',             subtitle: 'Rema',        durationLabel: '4:21', imageUrl: 'https://picsum.photos/seed/mv-calmdown/640/360',    href: '#' },
-]
-
-export function MobileMusicVideos() {
-  return (
-    <MediaCardRow
-      title="Music Videos"
-      href="#" // TODO route
-      items={SAMPLE_MUSIC_VIDEOS}
-      aspect="video"
-      cardWidth="w-[62vw]"
-    />
-  )
-}
-
 // ── PODCASTS ─────────────────────────────────────────────────────────────────
 // External podcasts — square cover with episode-length duration pill.
 // TEMPORARY sample data — replaced once the podcasts feed lands.
@@ -306,32 +254,6 @@ export function MobilePodcasts() {
       title="Podcasts"
       href="#" // TODO route
       items={SAMPLE_PODCASTS}
-      aspect="video"
-      cardWidth="w-[62vw]"
-    />
-  )
-}
-
-// ── LIVE SETS ────────────────────────────────────────────────────────────────
-// External live sets / festival recordings — 16:9 thumbs with duration pill.
-// TEMPORARY sample data — replaced once the live-sets feed lands.
-
-const SAMPLE_LIVE_SETS: MediaCardItem[] = [
-  // TODO route — individual hrefs stub to "#"
-  { id: 'ls-1', title: 'Black Coffee @ Hï Ibiza 2026',              subtitle: 'Hï Ibiza',      durationLabel: '2h 14m', imageUrl: 'https://picsum.photos/seed/ls-bc-ibiza/640/360',   href: '#' },
-  { id: 'ls-2', title: 'Major League DJz @ Fact Durban Rocks',      subtitle: 'Durban',        durationLabel: '1h 48m', imageUrl: 'https://picsum.photos/seed/ls-mldjz-fact/640/360', href: '#' },
-  { id: 'ls-3', title: 'Uncle Waffles @ AfroNation Portugal',       subtitle: 'Lisbon',        durationLabel: '1h 33m', imageUrl: 'https://picsum.photos/seed/ls-waffles-an/640/360', href: '#' },
-  { id: 'ls-4', title: 'Kabza De Small @ DStv Delicious Fest',      subtitle: 'Joburg',        durationLabel: '1h 56m', imageUrl: 'https://picsum.photos/seed/ls-kabza-dstv/640/360', href: '#' },
-  { id: 'ls-5', title: 'DBN Gogo @ Cape Town Carnival',             subtitle: 'Cape Town',     durationLabel: '1h 22m', imageUrl: 'https://picsum.photos/seed/ls-dbngogo-ct/640/360', href: '#' },
-  { id: 'ls-6', title: 'Themba @ Awakenings Amsterdam',             subtitle: 'Amsterdam',     durationLabel: '1h 41m', imageUrl: 'https://picsum.photos/seed/ls-themba-awk/640/360', href: '#' },
-]
-
-export function MobileLiveSets() {
-  return (
-    <MediaCardRow
-      title="Live Sets"
-      href="#" // TODO route
-      items={SAMPLE_LIVE_SETS}
       aspect="video"
       cardWidth="w-[62vw]"
     />
