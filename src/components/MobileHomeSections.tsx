@@ -306,8 +306,8 @@ export function MobilePodcasts() {
       title="Podcasts"
       href="#" // TODO route
       items={SAMPLE_PODCASTS}
-      aspect="square"
-      cardWidth="w-[42vw]"
+      aspect="video"
+      cardWidth="w-[62vw]"
     />
   )
 }
