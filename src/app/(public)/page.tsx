@@ -253,12 +253,14 @@ export default async function HomePage() {
     }))
 
   return (
+    <>
     <div className="px-4 sm:px-6 py-8 max-w-5xl mx-auto">
       {/*
-        Canonical 1–14 order. Mobile-only rows (Mobile*) wrap themselves in
-        md:hidden; the real sections (Popular Playlists, Music Videos, Live
-        Sets, Mixes, Read) render on both breakpoints. Responsive parity for
-        the desktop ordering lands in Commit 2b.
+        Canonical 1–14 order. The sample sections render at both breakpoints
+        with mobile-vw / desktop-pixel sizing; the real sections (Popular
+        Playlists, Music Videos, Live Sets, Mixes, Read) also render at both
+        widths. SiteFooter (16) sits outside this max-w-5xl column so its
+        terracotta band can full-bleed the layout's content area.
       */}
 
       {/* 1. Hero */}
@@ -353,9 +355,10 @@ export default async function HomePage() {
 
       {/* 15. Buy Merch (sample) */}
       <MobileMerch />
-
-      {/* 16. Site footer */}
-      <SiteFooter />
     </div>
+
+    {/* 16. Site footer — full-bleed terracotta, outside the content column */}
+    <SiteFooter />
+    </>
   )
 }

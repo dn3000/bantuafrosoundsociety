@@ -1,9 +1,27 @@
-// Site footer — responsive layout, dark theme, terracotta column-header
-// accents. Stacks on mobile; wordmark/socials on the left, two link columns
-// on the right at md+. Bottom-nav clearance is handled at the layout level
-// (pb-28 md:pb-0 in (public)/layout.tsx).
+// Site footer — full-bleed terracotta band sitting outside the page's
+// max-w-5xl content column. Big white wordmark + copyright on the left;
+// Account / Explore / Follow groups on the right.
+//
+// Social SVGs are coloured-on-disk; brightness-0 + invert forces them to
+// white so they read against the terracotta background.
 
 import Link from 'next/link'
+
+type FooterLink = { label: string; href: string }
+
+const ACCOUNT_LINKS: FooterLink[] = [
+  { label: 'Profile', href: '/profile' },
+  { label: 'Saved',   href: '/saved'   },
+  { label: 'Sign In', href: '/admin/login' },
+]
+
+const EXPLORE_LINKS: FooterLink[] = [
+  { label: 'Listen', href: '#' }, // TODO route
+  { label: 'Watch',  href: '#' }, // TODO route
+  { label: 'Read',   href: '/read' },
+  { label: 'Submit', href: '#' }, // TODO route
+  { label: 'About',  href: '#' }, // TODO route
+]
 
 // TODO — wire to real social URLs
 const SOCIALS = [
@@ -15,104 +33,87 @@ const SOCIALS = [
   { name: 'Threads',   href: '#', src: '/brand/threads.svg'   },
 ]
 
-// TODO route — link targets
-const EXPLORE_LINKS = [
-  { label: 'Listen', href: '#' },
-  { label: 'Watch',  href: '#' },
-  { label: 'Read',   href: '#' },
-]
+function GroupHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <h3
+      className="text-white text-sm font-bold uppercase tracking-wide mb-3"
+      style={{ fontFamily: 'var(--font-heading)' }}
+    >
+      {children}
+    </h3>
+  )
+}
 
-const BASS_LINKS = [
-  { label: 'About',   href: '#' },
-  { label: 'Submit',  href: '#' },
-  { label: 'Contact', href: '#' },
-]
+function LinkList({ items }: { items: FooterLink[] }) {
+  return (
+    <ul>
+      {items.map((l) => (
+        <li key={l.label}>
+          <Link
+            href={l.href}
+            className="text-white/80 hover:text-white text-sm block py-1 transition-colors"
+          >
+            {l.label}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-white/10 pt-10 mt-4">
-      <div className="flex flex-col gap-8 md:flex-row md:justify-between md:items-start">
-        {/* Left: wordmark + tagline + socials */}
-        <div className="flex flex-col gap-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/logo.svg"
-            alt="BASS"
-            className="h-10 w-auto"
-            loading="lazy"
-          />
-          <p className="text-white/50 text-sm">
-            South African Afro House, curated.
-          </p>
-          <div className="flex items-center gap-4 mt-1">
-            {SOCIALS.map((s) => (
-              <Link
-                key={s.name}
-                href={s.href}
-                aria-label={s.name}
-                className="opacity-70 hover:opacity-100 transition-opacity"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={s.src}
-                  alt=""
-                  aria-hidden="true"
-                  className="h-5 w-5"
-                  loading="lazy"
-                />
-              </Link>
-            ))}
+    <footer className="bg-[var(--color-accent)] text-white">
+      <div className="max-w-5xl mx-auto px-6 py-12">
+        <div className="flex flex-col gap-10 md:flex-row md:justify-between md:items-start">
+          {/* Left — big wordmark + copyright */}
+          <div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/logo.svg"
+              alt="BASS"
+              className="h-24 md:h-28 w-auto"
+              loading="lazy"
+            />
+            <p className="text-white/80 text-xs mt-4">
+              © 2026 BantuAfroSoundSociety.com
+            </p>
+          </div>
+
+          {/* Right — three groups */}
+          <div className="grid grid-cols-2 gap-8 md:flex md:flex-row md:gap-12">
+            <div>
+              <GroupHeader>Account</GroupHeader>
+              <LinkList items={ACCOUNT_LINKS} />
+            </div>
+            <div>
+              <GroupHeader>Explore</GroupHeader>
+              <LinkList items={EXPLORE_LINKS} />
+            </div>
+            <div className="col-span-2 md:col-auto">
+              <GroupHeader>Follow</GroupHeader>
+              <div className="flex items-center gap-4">
+                {SOCIALS.map((s) => (
+                  <Link
+                    key={s.name}
+                    href={s.href}
+                    aria-label={s.name}
+                    className="inline-flex"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={s.src}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-5 w-5 brightness-0 invert opacity-90 hover:opacity-100 transition-opacity"
+                      loading="lazy"
+                    />
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Right: two link columns */}
-        <div className="grid grid-cols-2 gap-8 md:gap-16">
-          <div>
-            <h3
-              className="text-sm font-bold mb-3 text-[var(--color-accent)]"
-              style={{ fontFamily: 'var(--font-heading)' }}
-            >
-              Explore
-            </h3>
-            <ul className="flex flex-col gap-2">
-              {EXPLORE_LINKS.map((l) => (
-                <li key={l.label}>
-                  <Link
-                    href={l.href}
-                    className="text-white/70 hover:text-white text-sm transition-colors"
-                  >
-                    {l.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h3
-              className="text-sm font-bold mb-3 text-[var(--color-accent)]"
-              style={{ fontFamily: 'var(--font-heading)' }}
-            >
-              BASS
-            </h3>
-            <ul className="flex flex-col gap-2">
-              {BASS_LINKS.map((l) => (
-                <li key={l.label}>
-                  <Link
-                    href={l.href}
-                    className="text-white/70 hover:text-white text-sm transition-colors"
-                  >
-                    {l.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom line */}
-      <div className="border-t border-white/10 mt-10 pt-5 text-white/40 text-xs">
-        © 2026 Bantu Afro Sound Society
       </div>
     </footer>
   )
