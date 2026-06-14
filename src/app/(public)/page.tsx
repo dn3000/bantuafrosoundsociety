@@ -10,6 +10,7 @@ import {
   MobileGenrePills,
   MobileBassMade,
   MobileBassThisWeek,
+  MobileBassSets,
 } from '@/components/MobileHomeSections'
 
 // ── TEMPORARY sample data — replaced with real CMS data in H2 ────────────────
@@ -528,6 +529,7 @@ export default async function HomePage() {
       <MobileGenrePills />
       <MobileBassMade />
       <MobileBassThisWeek />
+      <MobileBassSets />
 
       {!hasContent && (
         <p className="text-[var(--color-fg-tertiary)] text-sm text-center mt-24">

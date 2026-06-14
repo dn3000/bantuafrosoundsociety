@@ -179,3 +179,29 @@ export function MobileBassThisWeek() {
     </section>
   )
 }
+
+// ── BASS SETS ────────────────────────────────────────────────────────────────
+// BASS's own live recorded sets — 16:9 thumbnails with a duration pill.
+// TEMPORARY sample data — replaced once the sets backend lands.
+
+const SAMPLE_BASS_SETS: MediaCardItem[] = [
+  // TODO route — /sets doesn't exist yet, individual hrefs stub to "#"
+  { id: 'bset-1', title: 'BASS Live 014 — Rooftop Sessions',    subtitle: 'Jun 2026', durationLabel: '1h 22m', imageUrl: 'https://picsum.photos/seed/bset-014/640/360', href: '#' },
+  { id: 'bset-2', title: 'BASS Live 013 — Sunset Pavilion',     subtitle: 'May 2026', durationLabel: '56m',    imageUrl: 'https://picsum.photos/seed/bset-013/640/360', href: '#' },
+  { id: 'bset-3', title: 'BASS Live 012 — Underground Lagos',   subtitle: 'Apr 2026', durationLabel: '1h 47m', imageUrl: 'https://picsum.photos/seed/bset-012/640/360', href: '#' },
+  { id: 'bset-4', title: 'BASS Live 011 — Joburg After Dark',   subtitle: 'Apr 2026', durationLabel: '2h 04m', imageUrl: 'https://picsum.photos/seed/bset-011/640/360', href: '#' },
+  { id: 'bset-5', title: 'BASS Live 010 — Dakar Riverside',     subtitle: 'Mar 2026', durationLabel: '1h 11m', imageUrl: 'https://picsum.photos/seed/bset-010/640/360', href: '#' },
+  { id: 'bset-6', title: 'BASS Live 009 — Nairobi Warehouse',   subtitle: 'Mar 2026', durationLabel: '1h 35m', imageUrl: 'https://picsum.photos/seed/bset-009/640/360', href: '#' },
+]
+
+export function MobileBassSets() {
+  return (
+    <MediaCardRow
+      title="BASS Sets"
+      href="#" // TODO route
+      items={SAMPLE_BASS_SETS}
+      aspect="video"
+      cardWidth="w-[62vw]"
+    />
+  )
+}

@@ -17,6 +17,8 @@ export type MediaCardItem = {
   imageUrl: string
   href: string
   badge?: string
+  /** Short overlay label e.g. "1h 22m" — pill at bottom-right of cover. */
+  durationLabel?: string
 }
 
 export function MediaCardRow({
@@ -62,6 +64,11 @@ export function MediaCardRow({
               {item.badge && (
                 <span className="absolute top-2 left-2 inline-block text-[10px] font-semibold uppercase tracking-wider text-white border border-white/40 rounded-full px-2 py-0.5 bg-black/30 backdrop-blur-sm">
                   {item.badge}
+                </span>
+              )}
+              {item.durationLabel && (
+                <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[11px] leading-none px-1.5 py-0.5 rounded-[6px]">
+                  {item.durationLabel}
                 </span>
               )}
             </div>
