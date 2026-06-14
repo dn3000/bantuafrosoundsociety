@@ -8,6 +8,7 @@
 // backend lands. Desktop layout is unaffected — every export wraps itself in
 // md:hidden.
 
+import Link from 'next/link'
 import { MoreHorizontal } from 'lucide-react'
 import { SectionTitle } from './SectionTitle'
 import { MediaCardRow, type MediaCardItem } from './MediaCardRow'
@@ -333,6 +334,144 @@ export function MobileLiveSets() {
       items={SAMPLE_LIVE_SETS}
       aspect="video"
       cardWidth="w-[62vw]"
+    />
+  )
+}
+
+// ── CHARTS ──────────────────────────────────────────────────────────────────
+// Vertical ranked list — front-end placeholder; trend tooling feeds it later.
+// Monochrome + single-accent: up = accent terracotta, down = white/40, same =
+// white/30, new = accent outline pill. No green/red.
+// TEMPORARY sample data + heading sub-line.
+
+const CHARTS_SUBLINE = 'Top Afro House · this week'
+
+type ChartTrack = {
+  rank: number
+  coverUrl: string
+  title: string
+  artist: string
+  move: 'up' | 'down' | 'new' | 'same'
+  delta?: number
+}
+
+const SAMPLE_CHART_TRACKS: ChartTrack[] = [
+  { rank: 1, title: 'Sondela',           artist: 'DJ Stoks',         move: 'up',   delta: 2, coverUrl: 'https://picsum.photos/seed/ch-sondela/120/120' },
+  { rank: 2, title: 'Asibe Happy',       artist: 'Kabza De Small',   move: 'same',           coverUrl: 'https://picsum.photos/seed/ch-asibe/120/120'   },
+  { rank: 3, title: 'Ke Star',           artist: 'Focalistic',       move: 'up',   delta: 1, coverUrl: 'https://picsum.photos/seed/ch-kestar/120/120'  },
+  { rank: 4, title: 'Don Dada',          artist: 'Kelvin Momo',      move: 'new',            coverUrl: 'https://picsum.photos/seed/ch-dondada/120/120' },
+  { rank: 5, title: 'Ngiyazifela',       artist: 'Mas Musiq',        move: 'down', delta: 3, coverUrl: 'https://picsum.photos/seed/ch-ngiya/120/120'   },
+  { rank: 6, title: "Themba's Lament",   artist: 'Themba',           move: 'up',   delta: 5, coverUrl: 'https://picsum.photos/seed/ch-themba/120/120'  },
+  { rank: 7, title: 'Felele',            artist: 'De Mthuda',        move: 'down', delta: 1, coverUrl: 'https://picsum.photos/seed/ch-felele/120/120'  },
+  { rank: 8, title: 'Khusela',           artist: 'Daliwonga',        move: 'same',           coverUrl: 'https://picsum.photos/seed/ch-khusela/120/120' },
+]
+
+function ChartTrendChip({ move, delta }: { move: ChartTrack['move']; delta?: number }) {
+  if (move === 'up') {
+    return (
+      <span className="text-[var(--color-accent)] text-xs font-semibold tabular-nums shrink-0">
+        ▲{delta ?? ''}
+      </span>
+    )
+  }
+  if (move === 'down') {
+    return (
+      <span className="text-white/40 text-xs font-semibold tabular-nums shrink-0">
+        ▼{delta ?? ''}
+      </span>
+    )
+  }
+  if (move === 'new') {
+    return (
+      <span className="inline-block text-[10px] font-semibold uppercase tracking-wider text-[var(--color-accent)] border border-[var(--color-accent)] rounded-full px-1.5 py-0 shrink-0">
+        NEW
+      </span>
+    )
+  }
+  return (
+    <span className="text-white/30 text-sm shrink-0" aria-label="no change">
+      –
+    </span>
+  )
+}
+
+function ChartRow({ track, showDivider }: { track: ChartTrack; showDivider: boolean }) {
+  return (
+    <div
+      className={`flex items-center gap-3 py-2.5 ${
+        showDivider ? 'border-b border-white/8' : ''
+      }`}
+    >
+      <span
+        className="w-6 text-center text-[15px] font-bold text-white/40 shrink-0"
+        style={{ fontFamily: 'var(--font-heading)' }}
+      >
+        {track.rank}
+      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={track.coverUrl}
+        alt={track.title}
+        className="w-[46px] h-[46px] rounded-[8px] object-cover shrink-0"
+        loading="lazy"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-medium text-white line-clamp-1">
+          {track.title}
+        </p>
+        <p className="text-xs text-white/50 line-clamp-1 mt-0.5">
+          {track.artist}
+        </p>
+      </div>
+      <ChartTrendChip move={track.move} delta={track.delta} />
+    </div>
+  )
+}
+
+export function MobileCharts() {
+  if (SAMPLE_CHART_TRACKS.length === 0) return null
+  return (
+    <section className="md:hidden mb-10">
+      <Link href="#" className="block">
+        {/* TODO route → /charts */}
+        <SectionTitle title="Charts" className="mb-1" />
+      </Link>
+      <p className="text-xs text-white/50 mb-3">{CHARTS_SUBLINE}</p>
+      <div>
+        {SAMPLE_CHART_TRACKS.map((track, i) => (
+          <ChartRow
+            key={track.rank}
+            track={track}
+            showDivider={i < SAMPLE_CHART_TRACKS.length - 1}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ── EVENTS ───────────────────────────────────────────────────────────────────
+// Portrait poster cards; date carried as the existing badge pill (top-left).
+// TEMPORARY sample data — replaced once the events feed lands.
+
+const SAMPLE_EVENTS: MediaCardItem[] = [
+  // TODO route — individual hrefs stub to "#"
+  { id: 'ev-1', title: 'Black Coffee Live',                  subtitle: 'CTICC · Cape Town',        badge: 'JUL 6',  imageUrl: 'https://picsum.photos/seed/ev-blackcoffee/400/533', href: '#' },
+  { id: 'ev-2', title: 'Major League DJz: Soweto Edition',   subtitle: 'FNB Stadium · Soweto',     badge: 'AUG 14', imageUrl: 'https://picsum.photos/seed/ev-mldjz/400/533',       href: '#' },
+  { id: 'ev-3', title: 'Uncle Waffles: Lagos Takeover',      subtitle: 'Eko Convention · Lagos',   badge: 'JUL 22', imageUrl: 'https://picsum.photos/seed/ev-waffles/400/533',     href: '#' },
+  { id: 'ev-4', title: 'DBN Gogo at Moses Mabhida',          subtitle: 'Moses Mabhida · Durban',   badge: 'AUG 2',  imageUrl: 'https://picsum.photos/seed/ev-dbngogo/400/533',     href: '#' },
+  { id: 'ev-5', title: 'Themba: Modern Africa Live',         subtitle: 'Carfax · Joburg',          badge: 'SEP 5',  imageUrl: 'https://picsum.photos/seed/ev-themba/400/533',      href: '#' },
+  { id: 'ev-6', title: 'Kabza De Small: Europe Tour',        subtitle: 'Paradiso · Amsterdam',     badge: 'JUL 27', imageUrl: 'https://picsum.photos/seed/ev-kabza/400/533',       href: '#' },
+]
+
+export function MobileEvents() {
+  return (
+    <MediaCardRow
+      title="Events"
+      href="#" // TODO route
+      items={SAMPLE_EVENTS}
+      aspect="portrait"
+      cardWidth="w-[52vw]"
     />
   )
 }

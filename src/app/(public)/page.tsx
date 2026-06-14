@@ -16,6 +16,8 @@ import {
   MobileMusicVideos,
   MobilePodcasts,
   MobileLiveSets,
+  MobileCharts,
+  MobileEvents,
 } from '@/components/MobileHomeSections'
 
 // ── TEMPORARY sample data — replaced with real CMS data in H2 ────────────────
@@ -540,6 +542,8 @@ export default async function HomePage() {
       <MobileMusicVideos />
       <MobilePodcasts />
       <MobileLiveSets />
+      <MobileCharts />
+      <MobileEvents />
 
       {!hasContent && (
         <p className="text-[var(--color-fg-tertiary)] text-sm text-center mt-24">
