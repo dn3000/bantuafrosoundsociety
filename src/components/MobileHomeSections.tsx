@@ -1,7 +1,7 @@
 // Mobile-only homepage sections (md:hidden):
-//   MobileGenrePills   — horizontal scroll of grey filled pills, no section title.
-//   MobileBassSelect   — paged columns of stacked track rows ("BASS Select ›").
-//   MobileReleasesRow  — horizontal card carousel ("Releases ›").
+//   MobileGenrePills    — horizontal scroll of photo-card genre tiles, no section title.
+//   MobileBassMade      — in-house playlist row ("BASS Made ›"), built on MediaCardRow.
+//   MobileBassThisWeek  — paged columns of stacked track rows ("BASS This Week ›") with date sub-line.
 //
 // Server components — pure CSS scroll-snap, no client JS. Front-end only this
 // slice: sample data is TEMPORARY and gets swapped out once each section's
@@ -10,14 +10,8 @@
 
 import { MoreHorizontal } from 'lucide-react'
 import { SectionTitle } from './SectionTitle'
-
-// Common horizontal-scroll utility classes: smooth swipe, scrollbar hidden
-// cross-browser, edge-to-edge bleed off the page's px-4 padding.
-// `-mx-4 px-4 scroll-pl-4` all use the same 16px value as the page wrapper's
-// `px-4` content gutter, so the first item — initial render AND after any
-// swipe-snap — sits flush on the same vertical line as the section title.
-const SCROLL_TRACK =
-  'overflow-x-auto scroll-smooth py-1 -mx-4 px-4 scroll-pl-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
+import { MediaCardRow, type MediaCardItem } from './MediaCardRow'
+import { SCROLL_TRACK } from './scrollTrack'
 
 // ── GENRE IMAGE CARDS ────────────────────────────────────────────────────────
 // Horizontal carousel of photo tiles, each labelled with the genre name.
@@ -67,10 +61,39 @@ export function MobileGenrePills() {
   )
 }
 
-// ── BASS SELECT ──────────────────────────────────────────────────────────────
+// ── BASS MADE ────────────────────────────────────────────────────────────────
+// In-house playlist row built on the reusable MediaCardRow.
+// TEMPORARY sample playlists — replaced once the playlists backend lands.
+
+const SAMPLE_BASS_MADE: MediaCardItem[] = [
+  // TODO route — /playlists doesn't exist yet, individual hrefs stub to "#"
+  { id: 'bm-1', title: 'Sunday Reset',       subtitle: 'BASS · 24 tracks', imageUrl: 'https://picsum.photos/seed/bm-sunday/400/400',     href: '#' },
+  { id: 'bm-2', title: 'Late Set Energy',    subtitle: 'BASS · 31 tracks', imageUrl: 'https://picsum.photos/seed/bm-lateset/400/400',    href: '#' },
+  { id: 'bm-3', title: 'Bantu Futures',      subtitle: 'BASS · 18 tracks', imageUrl: 'https://picsum.photos/seed/bm-bantu/400/400',      href: '#' },
+  { id: 'bm-4', title: 'Continental Cool',   subtitle: 'BASS · 26 tracks', imageUrl: 'https://picsum.photos/seed/bm-continental/400/400', href: '#' },
+  { id: 'bm-5', title: 'Diaspora Sounds',    subtitle: 'BASS · 22 tracks', imageUrl: 'https://picsum.photos/seed/bm-diaspora/400/400',   href: '#' },
+  { id: 'bm-6', title: 'After Hours',        subtitle: 'BASS · 29 tracks', imageUrl: 'https://picsum.photos/seed/bm-afterhours/400/400', href: '#' },
+]
+
+export function MobileBassMade() {
+  return (
+    <MediaCardRow
+      title="BASS Made"
+      href="#" // TODO route
+      items={SAMPLE_BASS_MADE}
+      aspect="square"
+      cardWidth="w-[42vw]"
+    />
+  )
+}
+
+// ── BASS THIS WEEK ───────────────────────────────────────────────────────────
 // Paged track list: columns are ~80vw wide so the next column peeks ~20% on
 // the right, each column stacks 4 track rows.
-// TEMPORARY sample tracks — replaced once the BASS Select backend lands.
+// TEMPORARY sample tracks — replaced once the BASS This Week backend lands.
+
+// TEMPORARY sample date — will be derived from the playlist's publish date.
+const BASS_THIS_WEEK_DATE = 'Week of June 9, 2026'
 
 type SampleTrack = {
   id: string
@@ -79,7 +102,7 @@ type SampleTrack = {
   cover: string
 }
 
-const SAMPLE_BASS_SELECT_TRACKS: SampleTrack[] = [
+const SAMPLE_BASS_THIS_WEEK_TRACKS: SampleTrack[] = [
   { id: 'bs-1',  title: 'Sondela',          artist: 'DJ Stoks',          cover: 'https://picsum.photos/seed/bs1/120/120' },
   { id: 'bs-2',  title: 'Ke Star',          artist: 'Focalistic',        cover: 'https://picsum.photos/seed/bs2/120/120' },
   { id: 'bs-3',  title: 'Don Dada',         artist: 'Kelvin Momo',       cover: 'https://picsum.photos/seed/bs3/120/120' },
@@ -100,7 +123,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out
 }
 
-function BassSelectRow({ track, showDivider }: { track: SampleTrack; showDivider: boolean }) {
+function BassThisWeekRow({ track, showDivider }: { track: SampleTrack; showDivider: boolean }) {
   return (
     <div
       className={`flex items-center gap-3 py-2 ${
@@ -132,76 +155,24 @@ function BassSelectRow({ track, showDivider }: { track: SampleTrack; showDivider
   )
 }
 
-export function MobileBassSelect() {
-  const columns = chunk(SAMPLE_BASS_SELECT_TRACKS, ROWS_PER_COLUMN)
+export function MobileBassThisWeek() {
+  const columns = chunk(SAMPLE_BASS_THIS_WEEK_TRACKS, ROWS_PER_COLUMN)
   if (columns.length === 0) return null
 
   return (
     <section className="md:hidden mb-10">
-      <SectionTitle title="BASS Select" />
+      <SectionTitle title="BASS This Week" className="mb-1" />
+      <p className="text-xs text-white/50 mb-3">{BASS_THIS_WEEK_DATE}</p>
       <div className={`flex gap-3 snap-x snap-mandatory ${SCROLL_TRACK}`}>
         {columns.map((col, ci) => (
           <div key={ci} className="shrink-0 snap-start w-[80vw]">
             {col.map((track, ri) => (
-              <BassSelectRow
+              <BassThisWeekRow
                 key={track.id}
                 track={track}
                 showDivider={ri < col.length - 1}
               />
             ))}
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// ── RELEASES ─────────────────────────────────────────────────────────────────
-// Card carousel — each card ~40vw so roughly 2.5 cards show at once.
-// TEMPORARY sample releases — replaced once the Releases backend lands here.
-
-type SampleRelease = {
-  id: string
-  title: string
-  artist: string
-  cover: string
-}
-
-const SAMPLE_RELEASES: SampleRelease[] = [
-  { id: 'rel-1', title: 'Inkabi',       artist: 'Vusinator',         cover: 'https://picsum.photos/seed/rel1/400/400' },
-  { id: 'rel-2', title: 'Lockdown',     artist: 'Zakes Bantwini',    cover: 'https://picsum.photos/seed/rel2/400/400' },
-  { id: 'rel-3', title: 'Iphupho',      artist: 'Aymos',             cover: 'https://picsum.photos/seed/rel3/400/400' },
-  { id: 'rel-4', title: 'Imali',        artist: 'DBN Gogo',          cover: 'https://picsum.photos/seed/rel4/400/400' },
-  { id: 'rel-5', title: 'Sgudi Snysn',  artist: 'Sino Msolo',        cover: 'https://picsum.photos/seed/rel5/400/400' },
-  { id: 'rel-6', title: 'Asambeni',     artist: 'Mr JazziQ',         cover: 'https://picsum.photos/seed/rel6/400/400' },
-  { id: 'rel-7', title: 'Boikgantsho',  artist: 'Major League DJz',  cover: 'https://picsum.photos/seed/rel7/400/400' },
-  { id: 'rel-8', title: 'Nomalanga',    artist: 'TxC',               cover: 'https://picsum.photos/seed/rel8/400/400' },
-]
-
-export function MobileReleasesRow() {
-  if (SAMPLE_RELEASES.length === 0) return null
-
-  return (
-    <section className="md:hidden mb-10">
-      <SectionTitle title="Releases" />
-      <div className={`flex gap-3 ${SCROLL_TRACK}`}>
-        {SAMPLE_RELEASES.map((rel) => (
-          <div key={rel.id} className="shrink-0 w-[40vw]">
-            <div className="aspect-square rounded-[8px] overflow-hidden mb-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={rel.cover}
-                alt={rel.title}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            </div>
-            <p className="text-sm font-medium text-[var(--color-fg-primary)] line-clamp-1">
-              {rel.title}
-            </p>
-            <p className="text-xs text-[var(--color-fg-secondary)] line-clamp-1 mt-0.5">
-              {rel.artist}
-            </p>
           </div>
         ))}
       </div>

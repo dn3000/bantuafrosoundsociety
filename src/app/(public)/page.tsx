@@ -8,8 +8,8 @@ import { VideoCarousel, type VideoCarouselItem } from '@/components/VideoCarouse
 import { HeroCarousel, type HeroCarouselItem } from '@/components/HeroCarousel'
 import {
   MobileGenrePills,
-  MobileBassSelect,
-  MobileReleasesRow,
+  MobileBassMade,
+  MobileBassThisWeek,
 } from '@/components/MobileHomeSections'
 
 // ── TEMPORARY sample data — replaced with real CMS data in H2 ────────────────
@@ -526,8 +526,8 @@ export default async function HomePage() {
 
       {/* ── MOBILE-ONLY (md:hidden) — Slice B sample sections ───────────── */}
       <MobileGenrePills />
-      <MobileBassSelect />
-      <MobileReleasesRow />
+      <MobileBassMade />
+      <MobileBassThisWeek />
 
       {!hasContent && (
         <p className="text-[var(--color-fg-tertiary)] text-sm text-center mt-24">
