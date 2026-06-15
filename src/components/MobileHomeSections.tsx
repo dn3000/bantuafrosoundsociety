@@ -168,32 +168,6 @@ export function MobileBassThisWeek() {
   )
 }
 
-// ── BASS SETS ────────────────────────────────────────────────────────────────
-// BASS's own live recorded sets — 16:9 thumbnails with a duration pill.
-// TEMPORARY sample data — replaced once the sets backend lands.
-
-const SAMPLE_BASS_SETS: MediaCardItem[] = [
-  // TODO route — /sets doesn't exist yet, individual hrefs stub to "#"
-  { id: 'bset-1', title: 'BASS Live 014 — Rooftop Sessions',    subtitle: 'Jun 2026', durationLabel: '1h 22m', imageUrl: 'https://picsum.photos/seed/bset-014/640/360', href: '#' },
-  { id: 'bset-2', title: 'BASS Live 013 — Sunset Pavilion',     subtitle: 'May 2026', durationLabel: '56m',    imageUrl: 'https://picsum.photos/seed/bset-013/640/360', href: '#' },
-  { id: 'bset-3', title: 'BASS Live 012 — Underground Lagos',   subtitle: 'Apr 2026', durationLabel: '1h 47m', imageUrl: 'https://picsum.photos/seed/bset-012/640/360', href: '#' },
-  { id: 'bset-4', title: 'BASS Live 011 — Joburg After Dark',   subtitle: 'Apr 2026', durationLabel: '2h 04m', imageUrl: 'https://picsum.photos/seed/bset-011/640/360', href: '#' },
-  { id: 'bset-5', title: 'BASS Live 010 — Dakar Riverside',     subtitle: 'Mar 2026', durationLabel: '1h 11m', imageUrl: 'https://picsum.photos/seed/bset-010/640/360', href: '#' },
-  { id: 'bset-6', title: 'BASS Live 009 — Nairobi Warehouse',   subtitle: 'Mar 2026', durationLabel: '1h 35m', imageUrl: 'https://picsum.photos/seed/bset-009/640/360', href: '#' },
-]
-
-export function MobileBassSets() {
-  return (
-    <MediaCardRow
-      title="BASS Sets"
-      href="#" // TODO route
-      items={SAMPLE_BASS_SETS}
-      aspect="video"
-      cardWidth="w-[62vw] md:w-72"
-    />
-  )
-}
-
 // ── ARTIST SPOTLIGHT ─────────────────────────────────────────────────────────
 // Hand-picked "artists to watch" — replaces the old auto Trending Artists row
 // on mobile. Editorial, not algorithmic. 3:4 portrait covers.
@@ -217,32 +191,6 @@ export function MobileArtistSpotlight() {
       items={SAMPLE_ARTIST_SPOTLIGHT}
       aspect="portrait"
       cardWidth="w-[40vw] md:w-44"
-    />
-  )
-}
-
-// ── PODCASTS ─────────────────────────────────────────────────────────────────
-// External podcasts — square cover with episode-length duration pill.
-// TEMPORARY sample data — replaced once the podcasts feed lands.
-
-const SAMPLE_PODCASTS: MediaCardItem[] = [
-  // TODO route — individual hrefs stub to "#"
-  { id: 'pod-1', title: 'The Afro House Show — Ep. 42',     subtitle: 'with DJ Floyd',         durationLabel: '1h 02m', imageUrl: 'https://picsum.photos/seed/pod-afrohouse/400/400', href: '#' },
-  { id: 'pod-2', title: 'Sounds of the Continent — Ep. 18', subtitle: 'with Lerato Khumalo',   durationLabel: '56m',    imageUrl: 'https://picsum.photos/seed/pod-continent/400/400', href: '#' },
-  { id: 'pod-3', title: 'Mzansi Mixtape — Ep. 73',          subtitle: 'with DJ Stoks',         durationLabel: '1h 24m', imageUrl: 'https://picsum.photos/seed/pod-mzansi/400/400',    href: '#' },
-  { id: 'pod-4', title: 'Diaspora Diaries — Ep. 09',        subtitle: 'with Ade Okoye',        durationLabel: '48m',    imageUrl: 'https://picsum.photos/seed/pod-diaspora/400/400', href: '#' },
-  { id: 'pod-5', title: 'Late Night Lagos — Ep. 31',        subtitle: 'with Tobi Lou',         durationLabel: '1h 11m', imageUrl: 'https://picsum.photos/seed/pod-lagos/400/400',    href: '#' },
-  { id: 'pod-6', title: 'The BASS Conversation — Ep. 5',    subtitle: 'with Sello Mahlangu',   durationLabel: '1h 38m', imageUrl: 'https://picsum.photos/seed/pod-bass/400/400',     href: '#' },
-]
-
-export function MobilePodcasts() {
-  return (
-    <MediaCardRow
-      title="Podcasts"
-      href="#" // TODO route
-      items={SAMPLE_PODCASTS}
-      aspect="video"
-      cardWidth="w-[62vw] md:w-72"
     />
   )
 }

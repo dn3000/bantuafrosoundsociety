@@ -12,9 +12,7 @@ import {
   MobileGenrePills,
   MobileBassMade,
   MobileBassThisWeek,
-  MobileBassSets,
   MobileArtistSpotlight,
-  MobilePodcasts,
   MobileCharts,
   MobileEvents,
   MobileMerch,
@@ -211,12 +209,19 @@ export default async function HomePage() {
   const VIDEO_COLS = 'id, title, thumbnail_url, category, published_at, artists(name)'
   const VIDEO_ORDER = { ascending: false, nullsFirst: false } as const
 
-  const [{ data: mixVideosRaw }, { data: liveSetVideosRaw }, { data: musicVideoVideosRaw }] =
-    await Promise.all([
-      supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'mix').order('published_at', VIDEO_ORDER).limit(12),
-      supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_set').order('published_at', VIDEO_ORDER).limit(12),
-      supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'music_video').order('published_at', VIDEO_ORDER).limit(12),
-    ])
+  const [
+    { data: mixVideosRaw },
+    { data: liveSetVideosRaw },
+    { data: musicVideoVideosRaw },
+    { data: interviewVideosRaw },
+    { data: liveShowVideosRaw },
+  ] = await Promise.all([
+    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'mix').order('published_at', VIDEO_ORDER).limit(12),
+    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_set').order('published_at', VIDEO_ORDER).limit(12),
+    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'music_video').order('published_at', VIDEO_ORDER).limit(12),
+    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'interview').order('published_at', VIDEO_ORDER).limit(12),
+    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_show').order('published_at', VIDEO_ORDER).limit(12),
+  ])
 
   function toVideoItems(rows: VideoRow[]): VideoCarouselItem[] {
     return rows.map((v) => ({
@@ -232,6 +237,8 @@ export default async function HomePage() {
   const mixItems = toVideoItems((mixVideosRaw ?? []) as unknown as VideoRow[])
   const liveSetItems = toVideoItems((liveSetVideosRaw ?? []) as unknown as VideoRow[])
   const musicVideoItems = toVideoItems((musicVideoVideosRaw ?? []) as unknown as VideoRow[])
+  const podcastItems = toVideoItems((interviewVideosRaw ?? []) as unknown as VideoRow[])
+  const bassSetItems = toVideoItems((liveShowVideosRaw ?? []) as unknown as VideoRow[])
 
   // 6. Recent published articles for the Read carousel
   const { data: articlesRaw } = await supabase
@@ -290,7 +297,8 @@ export default async function HomePage() {
       <MobileGenrePills />
       <MobileBassMade items={bassMadeItems} />
       <MobileBassThisWeek />
-      <MobileBassSets />
+      {/* 5. BASS Sets (real, fed by videos category=live_show) */}
+      <VideoCarousel title="BASS Sets" items={bassSetItems} className="mb-14" />
       <MobileArtistSpotlight />
 
       {/* 7. Popular Playlists (real) */}
@@ -299,8 +307,8 @@ export default async function HomePage() {
       {/* 8. Music Videos (real) */}
       <VideoCarousel title="Music Videos" items={musicVideoItems} className="mb-14" />
 
-      {/* 9. Podcasts (mobile-only sample) */}
-      <MobilePodcasts />
+      {/* 9. Podcasts (real, fed by videos category=interview) */}
+      <VideoCarousel title="Podcasts" items={podcastItems} className="mb-14" />
 
       {/* 10. Live Sets (real) */}
       <VideoCarousel title="Live Sets" items={liveSetItems} className="mb-14" />

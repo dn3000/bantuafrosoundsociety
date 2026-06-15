@@ -24,12 +24,15 @@ type Video = {
 }
 
 const CATEGORIES = ['mix', 'live_set', 'live_show', 'music_video', 'interview', 'other'] as const
+// Labels here are the admin's view only — they hint which homepage row each
+// category feeds. The DB enum values stay mix / live_set / live_show /
+// music_video / interview / other. Public-facing labels live in VideoCarousel.
 const CATEGORY_LABELS: Record<string, string> = {
   mix: 'Mix',
   live_set: 'Live Set',
-  live_show: 'Live Show',
+  live_show: 'Live Show / BASS Set',
   music_video: 'Music Video',
-  interview: 'Interview',
+  interview: 'Interview / Podcast',
   other: 'Other',
 }
 
