@@ -215,12 +215,14 @@ export default async function HomePage() {
     { data: musicVideoVideosRaw },
     { data: interviewVideosRaw },
     { data: liveShowVideosRaw },
+    { data: exclusiveSetVideosRaw },
   ] = await Promise.all([
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'mix').order('published_at', VIDEO_ORDER).limit(12),
-    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_set').order('published_at', VIDEO_ORDER).limit(12),
+    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_set').eq('is_exclusive', false).order('published_at', VIDEO_ORDER).limit(12),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'music_video').order('published_at', VIDEO_ORDER).limit(12),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'interview').order('published_at', VIDEO_ORDER).limit(12),
-    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_show').order('published_at', VIDEO_ORDER).limit(12),
+    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_show').eq('is_exclusive', false).order('published_at', VIDEO_ORDER).limit(12),
+    supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('is_exclusive', true).order('published_at', VIDEO_ORDER).limit(12),
   ])
 
   function toVideoItems(rows: VideoRow[]): VideoCarouselItem[] {
@@ -239,6 +241,7 @@ export default async function HomePage() {
   const musicVideoItems = toVideoItems((musicVideoVideosRaw ?? []) as unknown as VideoRow[])
   const podcastItems = toVideoItems((interviewVideosRaw ?? []) as unknown as VideoRow[])
   const bassSetItems = toVideoItems((liveShowVideosRaw ?? []) as unknown as VideoRow[])
+  const exclusiveSetItems = toVideoItems((exclusiveSetVideosRaw ?? []) as unknown as VideoRow[])
 
   // 6. Recent published articles for the Read carousel
   const { data: articlesRaw } = await supabase
@@ -312,6 +315,9 @@ export default async function HomePage() {
 
       {/* 10. Live Sets (real) */}
       <VideoCarousel title="Live Sets" items={liveSetItems} className="mb-14" />
+
+      {/* Exclusive Sets (real, fed by videos.is_exclusive=true) */}
+      <VideoCarousel title="Exclusive Sets" items={exclusiveSetItems} className="mb-14" />
 
       {/* 11. Mixes (real) */}
       <VideoCarousel title="Mixes" items={mixItems} className="mb-14" />
