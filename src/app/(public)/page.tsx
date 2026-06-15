@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { CardCarousel, type CarouselItem } from '@/components/CardCarousel'
+import type { MediaCardItem } from '@/components/MediaCardRow'
 import { VideoCarousel, type VideoCarouselItem } from '@/components/VideoCarousel'
 import { HeroCarousel, type HeroCarouselItem } from '@/components/HeroCarousel'
 import { resolveHeroItems, type HeroItemRow } from '@/lib/hero'
@@ -50,6 +51,14 @@ type CuratedPlaylist = {
   curator_name: string | null
   cover_image_url: string | null
   image_url: string | null
+}
+
+type BassMadePlaylist = {
+  id: string
+  name: string | null
+  cover_image_url: string | null
+  image_url: string | null
+  track_count: number | null
 }
 
 type VideoRow = {
@@ -149,16 +158,44 @@ export default async function HomePage() {
     }
   }
 
-  // 4. Curated playlists — published, ordered by display_order asc then updated_at desc
-  const { data: playlistsRaw } = await supabase
-    .from('tracked_playlists')
-    .select('id, spotify_playlist_id, name, curator_name, cover_image_url, image_url')
-    .eq('is_published', true)
-    .order('display_order', { ascending: true })
-    .order('updated_at', { ascending: false })
-    .limit(12)
+  // 4. Curated playlists — split into BASS-made (in-house) and the rest. Both
+  // queries hit tracked_playlists with disjoint is_bass_made filters so no
+  // playlist appears in both rows.
+  const [{ data: bassMadeRaw }, { data: playlistsRaw }] = await Promise.all([
+    supabase
+      .from('tracked_playlists')
+      .select('id, name, cover_image_url, image_url, track_count')
+      .eq('is_published', true)
+      .eq('is_bass_made', true)
+      .order('display_order', { ascending: true })
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('tracked_playlists')
+      .select('id, spotify_playlist_id, name, curator_name, cover_image_url, image_url')
+      .eq('is_published', true)
+      .eq('is_bass_made', false)
+      .order('display_order', { ascending: true })
+      .order('updated_at', { ascending: false })
+      .limit(12),
+  ])
 
+  const bassMade = (bassMadeRaw ?? []) as BassMadePlaylist[]
   const playlists = (playlistsRaw ?? []) as CuratedPlaylist[]
+
+  // MediaCardItem.imageUrl is non-nullable — drop rows missing both image fields.
+  const bassMadeItems: MediaCardItem[] = bassMade
+    .map((pl): MediaCardItem | null => {
+      const imageUrl = pl.cover_image_url ?? pl.image_url
+      if (!imageUrl) return null
+      return {
+        id: pl.id,
+        title: pl.name ?? 'Untitled Playlist',
+        subtitle: pl.track_count ? `BASS · ${pl.track_count} tracks` : 'BASS',
+        imageUrl,
+        href: `/playlist/${pl.id}`,
+      }
+    })
+    .filter((it): it is MediaCardItem => it !== null)
 
   const playlistItems: CarouselItem[] = playlists.map((pl) => ({
     id: pl.id,
@@ -251,7 +288,7 @@ export default async function HomePage() {
 
       {/* 2–6. Mobile-only Slice B intro */}
       <MobileGenrePills />
-      <MobileBassMade />
+      <MobileBassMade items={bassMadeItems} />
       <MobileBassThisWeek />
       <MobileBassSets />
       <MobileArtistSpotlight />

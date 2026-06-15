@@ -59,25 +59,16 @@ export function MobileGenrePills() {
 }
 
 // ── BASS MADE ────────────────────────────────────────────────────────────────
-// In-house playlist row built on the reusable MediaCardRow.
-// TEMPORARY sample playlists — replaced once the playlists backend lands.
+// In-house playlist row built on the reusable MediaCardRow. Items come from
+// tracked_playlists where is_bass_made = true (see app/(public)/page.tsx).
+// MediaCardRow already returns null on empty, so [] hides the row.
 
-const SAMPLE_BASS_MADE: MediaCardItem[] = [
-  // TODO route — /playlists doesn't exist yet, individual hrefs stub to "#"
-  { id: 'bm-1', title: 'Sunday Reset',       subtitle: 'BASS · 24 tracks', imageUrl: 'https://picsum.photos/seed/bm-sunday/400/400',     href: '#' },
-  { id: 'bm-2', title: 'Late Set Energy',    subtitle: 'BASS · 31 tracks', imageUrl: 'https://picsum.photos/seed/bm-lateset/400/400',    href: '#' },
-  { id: 'bm-3', title: 'Bantu Futures',      subtitle: 'BASS · 18 tracks', imageUrl: 'https://picsum.photos/seed/bm-bantu/400/400',      href: '#' },
-  { id: 'bm-4', title: 'Continental Cool',   subtitle: 'BASS · 26 tracks', imageUrl: 'https://picsum.photos/seed/bm-continental/400/400', href: '#' },
-  { id: 'bm-5', title: 'Diaspora Sounds',    subtitle: 'BASS · 22 tracks', imageUrl: 'https://picsum.photos/seed/bm-diaspora/400/400',   href: '#' },
-  { id: 'bm-6', title: 'After Hours',        subtitle: 'BASS · 29 tracks', imageUrl: 'https://picsum.photos/seed/bm-afterhours/400/400', href: '#' },
-]
-
-export function MobileBassMade() {
+export function MobileBassMade({ items }: { items: MediaCardItem[] }) {
   return (
     <MediaCardRow
       title="BASS Made"
       href="#" // TODO route
-      items={SAMPLE_BASS_MADE}
+      items={items}
       aspect="square"
       cardWidth="w-[42vw] md:w-44"
     />
