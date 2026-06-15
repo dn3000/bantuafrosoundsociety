@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 const COLUMNS =
-  'id, spotify_playlist_id, name, curator_name, description, cover_image_url, image_url, owner_name, is_published, display_order, track_count, is_active, last_scanned_at, created_at, updated_at'
+  'id, spotify_playlist_id, name, curator_name, description, cover_image_url, image_url, owner_name, is_published, is_bass_made, display_order, track_count, is_active, last_scanned_at, created_at, updated_at'
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
@@ -28,6 +28,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (typeof body.coverImageUrl === 'string')
     patch.cover_image_url = body.coverImageUrl.trim() || null
   if (typeof body.isPublished === 'boolean') patch.is_published = body.isPublished
+  if (typeof body.isBassMade === 'boolean') patch.is_bass_made = body.isBassMade
   if (typeof body.displayOrder === 'number') patch.display_order = body.displayOrder
   if (typeof body.trackCount === 'number') patch.track_count = body.trackCount
   // Legacy scraper field kept for backward compat with the scrapers admin surface.

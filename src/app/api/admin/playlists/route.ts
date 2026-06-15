@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 export const runtime = 'nodejs'
 
 const COLUMNS =
-  'id, spotify_playlist_id, name, curator_name, description, cover_image_url, image_url, owner_name, is_published, display_order, track_count, is_active, last_scanned_at, created_at, updated_at'
+  'id, spotify_playlist_id, name, curator_name, description, cover_image_url, image_url, owner_name, is_published, is_bass_made, display_order, track_count, is_active, last_scanned_at, created_at, updated_at'
 
 export async function GET() {
   const supabase = await createClient()
@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       cover_image_url:
         typeof body.coverImageUrl === 'string' ? body.coverImageUrl.trim() || null : null,
       is_published: body.isPublished !== false,
+      is_bass_made: body.isBassMade === true,
       display_order: typeof body.displayOrder === 'number' ? body.displayOrder : 0,
       added_by: user.id,
     })

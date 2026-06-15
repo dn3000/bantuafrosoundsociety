@@ -13,6 +13,7 @@ type PlaylistRow = {
   cover_image_url: string | null
   image_url: string | null
   is_published: boolean
+  is_bass_made: boolean
   display_order: number
   track_count: number | null
   is_active: boolean
@@ -26,6 +27,7 @@ type FieldSet = {
   description: string
   coverImageUrl: string
   isPublished: boolean
+  isBassMade: boolean
   displayOrder: number
 }
 
@@ -35,6 +37,7 @@ const EMPTY: FieldSet = {
   description: '',
   coverImageUrl: '',
   isPublished: true,
+  isBassMade: false,
   displayOrder: 0,
 }
 
@@ -97,7 +100,7 @@ function Fields({
           className={FC}
         />
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -107,6 +110,16 @@ function Fields({
             className="rounded border-[var(--color-border-default)] accent-[var(--color-accent)]"
           />
           <span className="text-sm text-[var(--color-fg-primary)]">Published</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={fields.isBassMade}
+            onChange={(e) => onChange({ ...fields, isBassMade: e.target.checked })}
+            disabled={disabled}
+            className="rounded border-[var(--color-border-default)] accent-[var(--color-accent)]"
+          />
+          <span className="text-sm text-[var(--color-fg-primary)]">BASS-made</span>
         </label>
       </div>
       <div>
@@ -231,6 +244,7 @@ export default function CuratedPlaylistsPage() {
           description: addFields.description,
           coverImageUrl: addFields.coverImageUrl,
           isPublished: addFields.isPublished,
+          isBassMade: addFields.isBassMade,
           displayOrder: addFields.displayOrder,
         }),
       })
@@ -257,6 +271,7 @@ export default function CuratedPlaylistsPage() {
       description: pl.description || '',
       coverImageUrl: pl.cover_image_url || '',
       isPublished: pl.is_published,
+      isBassMade: pl.is_bass_made,
       displayOrder: pl.display_order,
     })
   }
@@ -278,6 +293,7 @@ export default function CuratedPlaylistsPage() {
           description: editFields.description,
           coverImageUrl: editFields.coverImageUrl,
           isPublished: editFields.isPublished,
+          isBassMade: editFields.isBassMade,
           displayOrder: editFields.displayOrder,
         }),
       })
@@ -309,6 +325,31 @@ export default function CuratedPlaylistsPage() {
         prev.map((p) =>
           p.id === pl.id
             ? { ...p, is_published: data.playlist?.is_published ?? !p.is_published }
+            : p
+        )
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function toggleBassMade(pl: PlaylistRow) {
+    setBusyId(pl.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/playlists/${pl.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isBassMade: !pl.is_bass_made }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || 'Failed to update')
+      setPlaylists((prev) =>
+        prev.map((p) =>
+          p.id === pl.id
+            ? { ...p, is_bass_made: data.playlist?.is_bass_made ?? !p.is_bass_made }
             : p
         )
       )
@@ -474,6 +515,19 @@ export default function CuratedPlaylistsPage() {
                         }`}
                       >
                         {pl.is_published ? 'Published' : 'Hidden'}
+                      </button>
+                      {/* BASS-made toggle */}
+                      <button
+                        type="button"
+                        onClick={() => toggleBassMade(pl)}
+                        disabled={isBusy || isEditing}
+                        className={`text-xs font-semibold rounded-full px-3 py-1 border transition-colors disabled:opacity-50 ${
+                          pl.is_bass_made
+                            ? 'border-[var(--color-accent)] text-[var(--color-accent)]'
+                            : 'border-[var(--color-border-default)] text-[var(--color-fg-tertiary)]'
+                        }`}
+                      >
+                        {pl.is_bass_made ? 'BASS-made' : 'Not BASS-made'}
                       </button>
                       <button
                         type="button"
