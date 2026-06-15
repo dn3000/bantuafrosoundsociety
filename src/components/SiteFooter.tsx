@@ -2,10 +2,19 @@
 // max-w-5xl content column. Big white wordmark + copyright on the left;
 // Account / Explore / Follow groups on the right.
 //
-// Social SVGs are coloured-on-disk; brightness-0 + invert forces them to
-// white so they read against the terracotta background.
+// Social glyphs come from react-icons/si (Simple Icons) so they render as
+// single-colour vector text — sharper and brand-faithful (real TikTok / X
+// shapes) compared to filtered raster brand SVGs.
 
 import Link from 'next/link'
+import type { IconType } from 'react-icons'
+import {
+  SiInstagram,
+  SiFacebook,
+  SiTiktok,
+  SiX,
+  SiThreads,
+} from 'react-icons/si'
 
 type FooterLink = { label: string; href: string }
 
@@ -24,13 +33,12 @@ const EXPLORE_LINKS: FooterLink[] = [
 ]
 
 // TODO — wire to real social URLs
-const SOCIALS = [
-  { name: 'Instagram', href: '#', src: '/brand/instagram.svg' },
-  { name: 'Facebook',  href: '#', src: '/brand/facebook.svg'  },
-  // Filename has a real typo on disk — 'tiiktok' (double i).
-  { name: 'TikTok',    href: '#', src: '/brand/tiiktok.svg'   },
-  { name: 'X',         href: '#', src: '/brand/X.svg'         },
-  { name: 'Threads',   href: '#', src: '/brand/threads.svg'   },
+const SOCIALS: { name: string; href: string; Icon: IconType }[] = [
+  { name: 'Instagram', href: '#', Icon: SiInstagram },
+  { name: 'Facebook',  href: '#', Icon: SiFacebook  },
+  { name: 'TikTok',    href: '#', Icon: SiTiktok   },
+  { name: 'X',         href: '#', Icon: SiX        },
+  { name: 'Threads',   href: '#', Icon: SiThreads  },
 ]
 
 function GroupHeader({ children }: { children: React.ReactNode }) {
@@ -63,8 +71,8 @@ function LinkList({ items }: { items: FooterLink[] }) {
 
 export function SiteFooter() {
   return (
-    <footer className="bg-[var(--color-accent)] text-white">
-      <div className="max-w-5xl mx-auto px-6 py-12">
+    <footer className="bg-[var(--color-accent)] text-white -mb-28 md:mb-0">
+      <div className="max-w-5xl mx-auto px-6 pt-12 pb-28 md:pb-12">
         <div className="flex flex-col gap-10 md:flex-row md:justify-between md:items-start">
           {/* Left — big wordmark + copyright */}
           <div>
@@ -100,13 +108,10 @@ export function SiteFooter() {
                     aria-label={s.name}
                     className="inline-flex"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={s.src}
-                      alt=""
-                      aria-hidden="true"
-                      className="h-5 w-5 brightness-0 invert opacity-90 hover:opacity-100 transition-opacity"
-                      loading="lazy"
+                    <s.Icon
+                      size={20}
+                      aria-hidden
+                      className="text-white opacity-90 hover:opacity-100 transition-opacity"
                     />
                   </Link>
                 ))}
