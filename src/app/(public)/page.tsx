@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { CardCarousel, type CarouselItem } from '@/components/CardCarousel'
 import { VideoCarousel, type VideoCarouselItem } from '@/components/VideoCarousel'
 import { HeroCarousel, type HeroCarouselItem } from '@/components/HeroCarousel'
+import { resolveHeroItems, type HeroItemRow } from '@/lib/hero'
 import {
   MobileGenrePills,
   MobileBassMade,
@@ -19,70 +20,26 @@ import {
 } from '@/components/MobileHomeSections'
 import { SiteFooter } from '@/components/SiteFooter'
 
-// ── TEMPORARY sample data — replaced with real CMS data in H2 ────────────────
-const SAMPLE_HERO_ITEMS: HeroCarouselItem[] = [
-  {
-    id: 'sample-1',
-    type: 'release',
-    kicker: 'Editors Pick',
-    headline: 'Shannen SP curates South African electronic underground compilation for TraTraTrax',
-    imageUrl: 'https://picsum.photos/seed/bass1/520/680',
-    typeBadge: 'Album',
-    title: 'TraTraTrax',
-    artist: 'Shannen SP',
-    date: '05 June 2026',
-    href: '/explore',
-  },
-  {
-    id: 'sample-2',
-    type: 'playlist',
-    kicker: 'New Playlist',
-    headline: 'West African night moves — 90 minutes of Afrobeats, Highlife and deep house to close the week',
-    imageUrl: 'https://picsum.photos/seed/bass2/520/680',
-    typeBadge: 'Playlist',
-    title: 'West African Night Moves',
-    artist: 'BASS Collective',
-    date: '07 June 2026',
-    href: '/explore',
-  },
-  {
-    id: 'sample-3',
-    type: 'video',
-    kicker: 'Live Session',
-    headline: 'Watch the full Afrobeats Session #14 — live at Alliance Française, Lagos',
-    imageUrl: 'https://picsum.photos/seed/bass3/520/680',
-    typeBadge: 'Video',
-    title: 'Live at Alliance Française',
-    artist: 'Various Artists',
-    date: '01 June 2026',
-    href: '/watch',
-  },
-  {
-    id: 'sample-4',
-    type: 'article',
-    kicker: 'Feature',
-    headline: 'The new wave of Afro-fusion: producers and vocalists reshaping the sound in 2026',
-    imageUrl: 'https://picsum.photos/seed/bass4/520/680',
-    typeBadge: 'Article',
-    title: 'The New Wave of Afro-Fusion',
-    artist: 'BASS Editorial',
-    date: '03 June 2026',
-    href: '/read',
-  },
-  {
-    id: 'sample-5',
-    type: 'release',
-    kicker: 'New Release',
-    headline: 'Kinshasa Echoes arrives — a collaboration between BASS and the Congo Square collective',
-    imageUrl: 'https://picsum.photos/seed/bass5/520/680',
-    typeBadge: 'EP',
-    title: 'Kinshasa Echoes',
-    artist: 'BASS × Congo Square',
-    date: '10 June 2026',
-    href: '/explore',
-  },
-]
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Hero formatting ───────────────────────────────────────────────────────────
+// "05 June 2026" — matches the "en-GB" + day '2-digit' convention used on the
+// Read page header. Returns '' for null/invalid so the carousel falls back to
+// blank metadata instead of "Invalid Date".
+function formatHeroDate(s: string | null): string {
+  if (!s) return ''
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+// resolver ref_type → HeroCarouselItem.type literal. HeroCarousel doesn't
+// branch on this field, but the type still demands one of the four literals,
+// so every submission (any subtype) collapses to 'release'.
+const REF_TYPE_TO_CAROUSEL: Record<HeroItemRow['ref_type'], HeroCarouselItem['type']> = {
+  submission: 'release',
+  video: 'video',
+  playlist: 'playlist',
+  article: 'article',
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -131,6 +88,32 @@ type ArticleLive = {
 
 export default async function HomePage() {
   const supabase = await createClient()
+
+  // 0. Hero items — RLS only returns is_published=true rows for anon.
+  const { data: heroRowsRaw } = await supabase
+    .from('hero_items')
+    .select('id, position, ref_type, ref_id, kicker, headline, is_published, created_at, updated_at')
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  const heroRows = (heroRowsRaw ?? []) as HeroItemRow[]
+  const heroResolved = heroRows.length ? await resolveHeroItems(supabase, heroRows) : []
+  // Drop items whose ref vanished (admin can still see them in /admin/hero
+  // flagged "ref missing") and items missing an image — the hero is image-led.
+  const heroItems: HeroCarouselItem[] = heroResolved
+    .filter((r) => !r.refMissing && r.imageUrl)
+    .map((r) => ({
+      id: r.id,
+      type: REF_TYPE_TO_CAROUSEL[r.ref_type],
+      kicker: r.kicker ?? '',
+      headline: r.headline ?? r.title,
+      imageUrl: r.imageUrl as string,
+      typeBadge: r.typeBadge,
+      title: r.title,
+      artist: r.subtitle ?? '',
+      date: formatHeroDate(r.date),
+      href: r.href,
+    }))
 
   // 1. Live editorial assignments — only article-backed slots survive the prune
   // (the only slot we still surface here is editors_pick_read).
@@ -263,8 +246,8 @@ export default async function HomePage() {
         terracotta band can full-bleed the layout's content area.
       */}
 
-      {/* 1. Hero */}
-      <HeroCarousel items={SAMPLE_HERO_ITEMS} />
+      {/* 1. Hero — only renders when admins have published at least one item. */}
+      {heroItems.length > 0 && <HeroCarousel items={heroItems} />}
 
       {/* 2–6. Mobile-only Slice B intro */}
       <MobileGenrePills />

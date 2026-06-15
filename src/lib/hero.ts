@@ -26,6 +26,10 @@ export type ResolvedHeroItem = HeroItemRow & {
   subtitle: string | null
   typeBadge: string
   href: string
+  // ISO date or timestamp from the underlying ref — submissions.release_date,
+  // videos.published_at, articles.published_at. Playlists have no natural
+  // date, so they stay null. Display formatting lives at the call site.
+  date: string | null
   refMissing: boolean
 }
 
@@ -92,6 +96,7 @@ type SubmissionRow = {
   artwork_url: string | null
   cover_image_url: string | null
   primary_artist_id: string | null
+  release_date: string | null
   artists: { name: string } | { name: string }[] | null
 }
 type VideoRow = {
@@ -100,6 +105,7 @@ type VideoRow = {
   thumbnail_url: string | null
   category: string
   youtube_video_id: string
+  published_at: string | null
 }
 type PlaylistRow = {
   id: string
@@ -116,6 +122,7 @@ type ArticleRow = {
   cover_image_url: string | null
   author: string | null
   source_name: string | null
+  published_at: string | null
 }
 
 function artistOf(s: SubmissionRow): string | null {
@@ -143,13 +150,13 @@ export async function resolveHeroItems(
     idsByType.submission.length
       ? supabase
           .from('submissions')
-          .select('id, title, slug, type, artwork_url, cover_image_url, primary_artist_id, artists(name)')
+          .select('id, title, slug, type, artwork_url, cover_image_url, primary_artist_id, release_date, artists(name)')
           .in('id', idsByType.submission)
       : Promise.resolve({ data: [] as SubmissionRow[], error: null }),
     idsByType.video.length
       ? supabase
           .from('videos')
-          .select('id, title, thumbnail_url, category, youtube_video_id')
+          .select('id, title, thumbnail_url, category, youtube_video_id, published_at')
           .in('id', idsByType.video)
       : Promise.resolve({ data: [] as VideoRow[], error: null }),
     idsByType.playlist.length
@@ -161,7 +168,7 @@ export async function resolveHeroItems(
     idsByType.article.length
       ? supabase
           .from('articles')
-          .select('id, title, slug, cover_image_url, author, source_name')
+          .select('id, title, slug, cover_image_url, author, source_name, published_at')
           .in('id', idsByType.article)
       : Promise.resolve({ data: [] as ArticleRow[], error: null }),
   ])
@@ -191,6 +198,7 @@ export async function resolveHeroItems(
         subtitle: artistName,
         typeBadge: SUBMISSION_TYPE_BADGE[r.type] ?? r.type.toUpperCase(),
         href: `/release/${r.id}`,
+        date: r.release_date,
         refMissing: false,
       }
     }
@@ -207,6 +215,7 @@ export async function resolveHeroItems(
         subtitle: r.category,
         typeBadge: 'WATCH',
         href: `/watch/${r.id}`,
+        date: r.published_at,
         refMissing: false,
       }
     }
@@ -220,6 +229,7 @@ export async function resolveHeroItems(
         subtitle: r.curator_name ?? r.owner_name ?? null,
         typeBadge: 'PLAYLIST',
         href: `/playlist/${r.id}`,
+        date: null,
         refMissing: false,
       }
     }
@@ -233,6 +243,7 @@ export async function resolveHeroItems(
       subtitle: r.author ?? r.source_name ?? null,
       typeBadge: 'FEATURE',
       href: `/read/${r.slug}`,
+      date: r.published_at,
       refMissing: false,
     }
   })
@@ -246,6 +257,7 @@ function missing(it: HeroItemRow, typeBadge: string): ResolvedHeroItem {
     subtitle: null,
     typeBadge,
     href: '#',
+    date: null,
     refMissing: true,
   }
 }
