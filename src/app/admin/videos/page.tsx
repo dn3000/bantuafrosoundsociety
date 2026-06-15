@@ -15,6 +15,7 @@ type Video = {
   published_at: string | null
   thumbnail_url: string | null
   status: VideoStatus
+  is_exclusive: boolean
   created_at: string
   artists: {
     id: string
@@ -86,7 +87,7 @@ export default function VideosPage() {
       let query = supabase
         .from('videos')
         .select(
-          'id, youtube_video_id, title, category, published_at, thumbnail_url, status, created_at, artists(id, name, slug)',
+          'id, youtube_video_id, title, category, published_at, thumbnail_url, status, is_exclusive, created_at, artists(id, name, slug)',
           { count: 'exact' },
         )
 
@@ -139,7 +140,10 @@ export default function VideosPage() {
     })
   }
 
-  async function patchVideo(id: string, updates: { category?: string; status?: VideoStatus }) {
+  async function patchVideo(
+    id: string,
+    updates: { category?: string; status?: VideoStatus; is_exclusive?: boolean },
+  ) {
     const res = await fetch(`/api/admin/videos/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -161,6 +165,23 @@ export default function VideosPage() {
     } catch (err) {
       setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, category: prevCategory } : v)))
       setToast({ kind: 'error', msg: err instanceof Error ? err.message : 'Failed to save category' })
+    } finally {
+      stopActioning(video.id)
+    }
+  }
+
+  async function handleExclusiveToggle(video: Video) {
+    if (actioning.has(video.id)) return
+    const next = !video.is_exclusive
+    setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, is_exclusive: next } : v)))
+    startActioning(video.id)
+    try {
+      await patchVideo(video.id, { is_exclusive: next })
+    } catch (err) {
+      setVideos((prev) =>
+        prev.map((v) => (v.id === video.id ? { ...v, is_exclusive: !next } : v)),
+      )
+      setToast({ kind: 'error', msg: err instanceof Error ? err.message : 'Failed to save exclusive' })
     } finally {
       stopActioning(video.id)
     }
@@ -327,6 +348,7 @@ export default function VideosPage() {
                 actioning={actioning.has(v.id)}
                 onCategoryChange={(cat) => handleCategoryChange(v, cat)}
                 onStatusChange={(s) => handleStatusChange(v, s)}
+                onExclusiveToggle={() => handleExclusiveToggle(v)}
                 onApprove={() => handleStatusChange(v, 'approved')}
                 onReject={() => handleStatusChange(v, 'rejected')}
                 onDelete={() => handleDelete(v)}
@@ -381,6 +403,7 @@ function VideoRow({
   actioning,
   onCategoryChange,
   onStatusChange,
+  onExclusiveToggle,
   onApprove,
   onReject,
   onDelete,
@@ -389,6 +412,7 @@ function VideoRow({
   actioning: boolean
   onCategoryChange: (cat: string) => void
   onStatusChange: (s: VideoStatus) => void
+  onExclusiveToggle: () => void
   onApprove: () => void
   onReject: () => void
   onDelete: () => void
@@ -436,6 +460,20 @@ function VideoRow({
           )}
         </p>
       </div>
+
+      {/* Exclusive toggle — pill, optimistic */}
+      <button
+        type="button"
+        onClick={onExclusiveToggle}
+        disabled={actioning}
+        className={`text-xs font-semibold rounded-full px-3 py-1 border transition-colors disabled:opacity-50 flex-shrink-0 ${
+          video.is_exclusive
+            ? 'border-[var(--color-accent)] text-[var(--color-accent)]'
+            : 'border-[var(--color-border-default)] text-[var(--color-fg-tertiary)]'
+        }`}
+      >
+        {video.is_exclusive ? 'Exclusive' : 'Not exclusive'}
+      </button>
 
       {/* Category — saves on change */}
       <select

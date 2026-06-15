@@ -25,7 +25,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const updates: { category?: string; status?: string } = {}
+  const updates: { category?: string; status?: string; is_exclusive?: boolean } = {}
 
   if ('category' in body) {
     if (!ALLOWED_CATEGORIES.includes(body.category as (typeof ALLOWED_CATEGORIES)[number])) {
@@ -41,6 +41,13 @@ export async function PATCH(
     updates.status = body.status as string
   }
 
+  if ('is_exclusive' in body) {
+    if (typeof body.is_exclusive !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid is_exclusive' }, { status: 400 })
+    }
+    updates.is_exclusive = body.is_exclusive
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
   }
@@ -49,7 +56,7 @@ export async function PATCH(
     .from('videos')
     .update(updates)
     .eq('id', id)
-    .select('id, status, category')
+    .select('id, status, category, is_exclusive')
     .single()
 
   if (error) {
