@@ -330,7 +330,7 @@ export default async function HomePage() {
         ? `/release/${sub.id}`
         : (row.source_url ?? null)
       if (!cover || !href || !title) return null
-      return { id: row.id, title, artist, cover, href }
+      return { id: row.id, title, artist, cover, href, external: !sub }
     })
     .filter((it): it is BassThisWeekItem => it !== null)
 

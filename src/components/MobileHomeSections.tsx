@@ -85,6 +85,10 @@ export type BassThisWeekItem = {
   artist: string
   cover: string
   href: string
+  // Submission-backed items go to internal /release/<id> pages; standalone
+  // items (paste-a-link rows) point at arbitrary off-site URLs and open in
+  // a new tab with rel="noopener noreferrer".
+  external: boolean
 }
 
 const ROWS_PER_COLUMN = 4
@@ -96,13 +100,11 @@ function chunk<T>(arr: T[], size: number): T[][] {
 }
 
 function BassThisWeekRow({ track, showDivider }: { track: BassThisWeekItem; showDivider: boolean }) {
-  return (
-    <Link
-      href={track.href}
-      className={`flex items-center gap-3 py-2 ${
-        showDivider ? 'border-b border-white/8' : ''
-      }`}
-    >
+  const rowClass = `flex items-center gap-3 py-2 ${
+    showDivider ? 'border-b border-white/8' : ''
+  }`
+  const inner = (
+    <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={track.cover}
@@ -124,6 +126,20 @@ function BassThisWeekRow({ track, showDivider }: { track: BassThisWeekItem; show
         className="text-[var(--color-fg-tertiary)] shrink-0"
         aria-hidden="true"
       />
+    </>
+  )
+  return track.external ? (
+    <a
+      href={track.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={rowClass}
+    >
+      {inner}
+    </a>
+  ) : (
+    <Link href={track.href} className={rowClass}>
+      {inner}
     </Link>
   )
 }

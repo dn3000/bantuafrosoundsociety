@@ -81,6 +81,12 @@ export async function GET() {
   return NextResponse.json({ items })
 }
 
+function strOrNull(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const trimmed = v.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -95,40 +101,58 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const submissionId =
-    typeof body.submission_id === 'string' ? body.submission_id.trim() : ''
-  if (!submissionId) {
-    return NextResponse.json(
-      { error: 'submission_id is required' },
-      { status: 400 },
-    )
-  }
+  const submissionId = strOrNull(body.submission_id)
+  const insertPayload: Record<string, unknown> = {}
 
-  const { data: sub, error: subErr } = await supabase
-    .from('submissions')
-    .select('id')
-    .eq('id', submissionId)
-    .maybeSingle()
-  if (subErr) {
-    return NextResponse.json({ error: subErr.message }, { status: 500 })
-  }
-  if (!sub) {
-    return NextResponse.json(
-      { error: `No submission with id ${submissionId}` },
-      { status: 404 },
-    )
-  }
+  if (submissionId) {
+    const { data: sub, error: subErr } = await supabase
+      .from('submissions')
+      .select('id')
+      .eq('id', submissionId)
+      .maybeSingle()
+    if (subErr) {
+      return NextResponse.json({ error: subErr.message }, { status: 500 })
+    }
+    if (!sub) {
+      return NextResponse.json(
+        { error: `No submission with id ${submissionId}` },
+        { status: 404 },
+      )
+    }
 
-  const { data: existing } = await supabase
-    .from('bass_this_week')
-    .select('id')
-    .eq('submission_id', submissionId)
-    .maybeSingle()
-  if (existing) {
-    return NextResponse.json(
-      { error: 'Submission is already in This Week' },
-      { status: 409 },
-    )
+    const { data: existing } = await supabase
+      .from('bass_this_week')
+      .select('id')
+      .eq('submission_id', submissionId)
+      .maybeSingle()
+    if (existing) {
+      return NextResponse.json(
+        { error: 'Submission is already in This Week' },
+        { status: 409 },
+      )
+    }
+    insertPayload.submission_id = submissionId
+  } else {
+    const sourceUrl = strOrNull(body.source_url)
+    const title = strOrNull(body.title)
+    if (!sourceUrl || !title) {
+      return NextResponse.json(
+        { error: 'source_url and title are required for standalone items' },
+        { status: 400 },
+      )
+    }
+    try {
+      const u = new URL(sourceUrl)
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return NextResponse.json({ error: 'source_url must be http(s)' }, { status: 400 })
+      }
+    } catch {
+      return NextResponse.json({ error: 'source_url is not a valid URL' }, { status: 400 })
+    }
+    insertPayload.source_url = sourceUrl
+    insertPayload.title = title
+    insertPayload.artist_name = strOrNull(body.artist_name)
+    insertPayload.artwork_url = strOrNull(body.artwork_url)
   }
 
   const { data: maxRow } = await supabase
@@ -137,11 +161,11 @@ export async function POST(request: Request) {
     .order('position', { ascending: false })
     .limit(1)
     .maybeSingle()
-  const nextPosition = (maxRow?.position ?? -1) + 1
+  insertPayload.position = (maxRow?.position ?? -1) + 1
 
   const { data, error } = await supabase
     .from('bass_this_week')
-    .insert({ submission_id: submissionId, position: nextPosition })
+    .insert(insertPayload)
     .select(SELECT)
     .single()
 

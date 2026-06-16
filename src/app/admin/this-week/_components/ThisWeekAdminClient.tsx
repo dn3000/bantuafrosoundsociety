@@ -295,12 +295,213 @@ function ThisWeekRow({
   )
 }
 
-// AddPanel hosts the add modes. Today: submission picker only. TW3 will add a
-// "paste a link" mode beside it (tab toggle wired into this panel).
+// AddPanel hosts the two add modes: pick from approved submissions, or paste
+// an external link (Spotify/YouTube/anything with OpenGraph) and let the
+// admin edit the resolved metadata before saving as a standalone row.
 function AddPanel({ onAdded }: { onAdded: (item: ThisWeekItem) => void }) {
+  const [mode, setMode] = useState<'submission' | 'link'>('submission')
   return (
     <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-4 space-y-4">
-      <SubmissionPicker onAdded={onAdded} />
+      <div
+        role="tablist"
+        className="flex gap-1 border-b border-[var(--color-border-subtle)] -mx-1 px-1"
+      >
+        <TabButton active={mode === 'submission'} onClick={() => setMode('submission')}>
+          From submissions
+        </TabButton>
+        <TabButton active={mode === 'link'} onClick={() => setMode('link')}>
+          Paste a link
+        </TabButton>
+      </div>
+      {mode === 'submission' ? (
+        <SubmissionPicker onAdded={onAdded} />
+      ) : (
+        <LinkPaster onAdded={onAdded} />
+      )}
+    </div>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`text-xs font-semibold uppercase tracking-wider px-3 py-2 transition-colors border-b-2 -mb-[1px] ${
+        active
+          ? 'text-[var(--color-fg-primary)] border-[var(--color-accent)]'
+          : 'text-[var(--color-fg-tertiary)] border-transparent hover:text-[var(--color-fg-secondary)]'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function LinkPaster({ onAdded }: { onAdded: (item: ThisWeekItem) => void }) {
+  const [url, setUrl] = useState('')
+  const [title, setTitle] = useState('')
+  const [artist, setArtist] = useState('')
+  const [artwork, setArtwork] = useState('')
+  const [resolving, setResolving] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [touched, setTouched] = useState(false)
+
+  async function handleResolve() {
+    const trimmed = url.trim()
+    if (!trimmed) {
+      setError('Paste a URL first')
+      return
+    }
+    setResolving(true)
+    setError(null)
+    try {
+      const res = await fetch(
+        `/api/admin/this-week/resolve?url=${encodeURIComponent(trimmed)}`,
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Lookup failed')
+      setTitle(typeof data.title === 'string' ? data.title : '')
+      setArtist(typeof data.artist === 'string' ? data.artist : '')
+      setArtwork(typeof data.artwork === 'string' ? data.artwork : '')
+      setTouched(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Lookup failed')
+    } finally {
+      setResolving(false)
+    }
+  }
+
+  async function handleSave() {
+    const trimmedUrl = url.trim()
+    const trimmedTitle = title.trim()
+    if (!trimmedUrl) {
+      setError('URL is required')
+      return
+    }
+    if (!trimmedTitle) {
+      setError('Title is required')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/this-week', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_url: trimmedUrl,
+          title: trimmedTitle,
+          artist_name: artist.trim() || null,
+          artwork_url: artwork.trim() || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Save failed')
+      onAdded(data.item as ThisWeekItem)
+      setUrl('')
+      setTitle('')
+      setArtist('')
+      setArtwork('')
+      setTouched(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const previewSrc = artwork.trim() || null
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className={labelCls}>Track / release URL</label>
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://open.spotify.com/track/… or https://youtu.be/…"
+            className={inputCls}
+          />
+          <button
+            type="button"
+            onClick={handleResolve}
+            disabled={resolving || !url.trim()}
+            className="text-sm font-semibold border border-[var(--color-border-default)] text-[var(--color-fg-primary)] hover:bg-[var(--color-bg-higher)] disabled:opacity-40 rounded-[var(--radius)] px-4 transition-colors whitespace-nowrap"
+          >
+            {resolving ? 'Looking…' : 'Look up'}
+          </button>
+        </div>
+        <p className="text-[10px] text-[var(--color-fg-tertiary)] mt-1.5">
+          Spotify, YouTube, or any page with OpenGraph tags. Fields below are editable — fill in anything the lookup misses.
+        </p>
+      </div>
+
+      {touched && (
+        <div className="grid grid-cols-[64px_1fr] gap-3 items-start">
+          <Thumbnail src={previewSrc} alt={title || 'Preview'} />
+          <div className="space-y-2 min-w-0">
+            <div>
+              <label className={labelCls}>Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Track title"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Artist</label>
+              <input
+                type="text"
+                value={artist}
+                onChange={(e) => setArtist(e.target.value)}
+                placeholder="Artist name (optional)"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Artwork URL</label>
+              <input
+                type="url"
+                value={artwork}
+                onChange={(e) => setArtwork(e.target.value)}
+                placeholder="https://…"
+                className={inputCls}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {touched && (
+        <div className="flex items-center justify-end gap-3 pt-2 border-t border-[var(--color-border-subtle)]">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !title.trim() || !url.trim()}
+            className="text-sm font-semibold bg-[var(--color-accent)] text-[var(--color-fg-primary)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 rounded-[var(--radius)] px-5 py-2 transition-colors"
+          >
+            {saving ? 'Saving…' : 'Add to This Week'}
+          </button>
+        </div>
+      )}
+
+      {error && <p className="text-xs text-[var(--color-error)]">{error}</p>}
     </div>
   )
 }
