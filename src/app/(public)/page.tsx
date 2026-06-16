@@ -300,6 +300,8 @@ export default async function HomePage() {
       <MobileGenrePills />
       <MobileBassMade items={bassMadeItems} />
       <MobileBassThisWeek />
+      {/* Exclusive Sets (real, fed by videos.is_exclusive=true) */}
+      <VideoCarousel title="Exclusive Sets" items={exclusiveSetItems} className="mb-14" />
       {/* 5. BASS Sets (real, fed by videos category=live_show) */}
       <VideoCarousel title="BASS Sets" items={bassSetItems} className="mb-14" />
       <MobileArtistSpotlight />
@@ -315,9 +317,6 @@ export default async function HomePage() {
 
       {/* 10. Live Sets (real) */}
       <VideoCarousel title="Live Sets" items={liveSetItems} className="mb-14" />
-
-      {/* Exclusive Sets (real, fed by videos.is_exclusive=true) */}
-      <VideoCarousel title="Exclusive Sets" items={exclusiveSetItems} className="mb-14" />
 
       {/* 11. Mixes (real) */}
       <VideoCarousel title="Mixes" items={mixItems} className="mb-14" />
