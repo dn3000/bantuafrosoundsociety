@@ -16,6 +16,7 @@ import {
   MobileCharts,
   MobileEvents,
   MobileMerch,
+  type BassThisWeekItem,
 } from '@/components/MobileHomeSections'
 import { SiteFooter } from '@/components/SiteFooter'
 
@@ -38,6 +39,22 @@ const REF_TYPE_TO_CAROUSEL: Record<HeroItemRow['ref_type'], HeroCarouselItem['ty
   video: 'video',
   playlist: 'playlist',
   article: 'article',
+}
+
+// "Week of June 15, 2026" — Monday of the current week in the server's tz.
+// Server-rendered so the label is current at request time; en-US long month
+// matches the section's prior copy ("Week of June 9, 2026").
+function computeWeekLabel(now: Date): string {
+  const day = now.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
+  const daysSinceMonday = (day + 6) % 7
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - daysSinceMonday)
+  const formatted = monday.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+  return `Week of ${formatted}`
 }
 
 // "Durban · Gqom" / "South Africa · Afro House". City wins; missing city falls
@@ -103,6 +120,26 @@ type SpotlightArtistRow = {
   city: string | null
   country: string | null
   subgenres: string[] | null
+}
+
+type BassThisWeekRow = {
+  id: string
+  position: number
+  submission_id: string | null
+  source_url: string | null
+  title: string | null
+  artist_name: string | null
+  artwork_url: string | null
+  submission:
+    | {
+        id: string
+        title: string
+        artwork_url: string | null
+        cover_image_url: string | null
+        source_url: string | null
+        artists: { name: string } | { name: string }[] | null
+      }
+    | null
 }
 
 type ArticleLive = {
@@ -259,6 +296,46 @@ export default async function HomePage() {
     })
     .filter((it): it is MediaCardItem => it !== null)
 
+  // 4c. BASS This Week — curated picks (admin-managed). Submission-backed rows
+  // resolve title/artist/artwork/href via the embedded submissions join;
+  // standalone rows (TW3 paste-link slice) fall through to their own columns.
+  // Mirrors the admin GET resolver at api/admin/this-week/route.ts. Rows
+  // without artwork are dropped — the section is image-led.
+  const { data: thisWeekRaw } = await supabase
+    .from('bass_this_week')
+    .select(`
+      id, position, submission_id, source_url, title, artist_name, artwork_url,
+      submission:submissions!submission_id(
+        id, title, artwork_url, cover_image_url, source_url,
+        artists:primary_artist_id(name)
+      )
+    `)
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  const thisWeekRows = (thisWeekRaw ?? []) as unknown as BassThisWeekRow[]
+  const thisWeekItems: BassThisWeekItem[] = thisWeekRows
+    .map((row): BassThisWeekItem | null => {
+      const sub = row.submission
+      const subArtist = sub
+        ? Array.isArray(sub.artists)
+          ? (sub.artists[0]?.name ?? null)
+          : (sub.artists?.name ?? null)
+        : null
+      const title = sub?.title ?? row.title ?? ''
+      const artist = subArtist ?? row.artist_name ?? ''
+      const cover =
+        sub?.artwork_url ?? sub?.cover_image_url ?? row.artwork_url ?? null
+      const href = sub
+        ? `/release/${sub.id}`
+        : (row.source_url ?? null)
+      if (!cover || !href || !title) return null
+      return { id: row.id, title, artist, cover, href }
+    })
+    .filter((it): it is BassThisWeekItem => it !== null)
+
+  const weekLabel = computeWeekLabel(new Date())
+
   // 5. Watch: approved videos by category (mix / live_set / music_video), published_at desc
   const VIDEO_COLS = 'id, title, thumbnail_url, category, published_at, artists(name)'
   const VIDEO_ORDER = { ascending: false, nullsFirst: false } as const
@@ -353,7 +430,7 @@ export default async function HomePage() {
       {/* 2–6. Mobile-only Slice B intro */}
       <MobileGenrePills />
       <MobileBassMade items={bassMadeItems} />
-      <MobileBassThisWeek />
+      <MobileBassThisWeek items={thisWeekItems} weekLabel={weekLabel} />
       {/* Exclusive Sets (real, fed by videos.is_exclusive=true) */}
       <VideoCarousel title="Exclusive Sets" items={exclusiveSetItems} className="mb-14" />
       {/* 5. BASS Sets (real, fed by videos category=live_show) */}

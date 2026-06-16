@@ -75,31 +75,17 @@ export function MobileBassMade({ items }: { items: MediaCardItem[] }) {
 
 // ── BASS THIS WEEK ───────────────────────────────────────────────────────────
 // Paged track list: columns are ~80vw wide so the next column peeks ~20% on
-// the right, each column stacks 4 track rows.
-// TEMPORARY sample tracks — replaced once the BASS This Week backend lands.
+// the right, each column stacks 4 track rows. Items are curated in
+// /admin/this-week (bass_this_week table); the page.tsx query resolves the
+// submission join and passes the resolved list in. Returns null on empty.
 
-// TEMPORARY sample date — will be derived from the playlist's publish date.
-const BASS_THIS_WEEK_DATE = 'Week of June 9, 2026'
-
-type SampleTrack = {
+export type BassThisWeekItem = {
   id: string
   title: string
   artist: string
   cover: string
+  href: string
 }
-
-const SAMPLE_BASS_THIS_WEEK_TRACKS: SampleTrack[] = [
-  { id: 'bs-1',  title: 'Sondela',          artist: 'DJ Stoks',          cover: 'https://picsum.photos/seed/bs1/120/120' },
-  { id: 'bs-2',  title: 'Ke Star',          artist: 'Focalistic',        cover: 'https://picsum.photos/seed/bs2/120/120' },
-  { id: 'bs-3',  title: 'Don Dada',         artist: 'Kelvin Momo',       cover: 'https://picsum.photos/seed/bs3/120/120' },
-  { id: 'bs-4',  title: 'Asibe Happy',      artist: 'Kabza De Small',    cover: 'https://picsum.photos/seed/bs4/120/120' },
-  { id: 'bs-5',  title: "Themba's Lament",  artist: 'Themba',            cover: 'https://picsum.photos/seed/bs5/120/120' },
-  { id: 'bs-6',  title: 'Khusela',          artist: 'Daliwonga',         cover: 'https://picsum.photos/seed/bs6/120/120' },
-  { id: 'bs-7',  title: 'Akulaleki',        artist: 'Samthing Soweto',   cover: 'https://picsum.photos/seed/bs7/120/120' },
-  { id: 'bs-8',  title: 'Ngiyazifela',      artist: 'Mas Musiq',         cover: 'https://picsum.photos/seed/bs8/120/120' },
-  { id: 'bs-9',  title: 'Nguwe',            artist: 'Vigro Deep',        cover: 'https://picsum.photos/seed/bs9/120/120' },
-  { id: 'bs-10', title: 'Felele',           artist: 'De Mthuda',         cover: 'https://picsum.photos/seed/bs10/120/120' },
-]
 
 const ROWS_PER_COLUMN = 4
 
@@ -109,9 +95,10 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out
 }
 
-function BassThisWeekRow({ track, showDivider }: { track: SampleTrack; showDivider: boolean }) {
+function BassThisWeekRow({ track, showDivider }: { track: BassThisWeekItem; showDivider: boolean }) {
   return (
-    <div
+    <Link
+      href={track.href}
       className={`flex items-center gap-3 py-2 ${
         showDivider ? 'border-b border-white/8' : ''
       }`}
@@ -137,18 +124,24 @@ function BassThisWeekRow({ track, showDivider }: { track: SampleTrack; showDivid
         className="text-[var(--color-fg-tertiary)] shrink-0"
         aria-hidden="true"
       />
-    </div>
+    </Link>
   )
 }
 
-export function MobileBassThisWeek() {
-  const columns = chunk(SAMPLE_BASS_THIS_WEEK_TRACKS, ROWS_PER_COLUMN)
-  if (columns.length === 0) return null
+export function MobileBassThisWeek({
+  items,
+  weekLabel,
+}: {
+  items: BassThisWeekItem[]
+  weekLabel: string
+}) {
+  if (items.length === 0) return null
+  const columns = chunk(items, ROWS_PER_COLUMN)
 
   return (
     <section className="mb-10 md:mb-14">
       <SectionTitle title="BASS This Week" className="mb-1" />
-      <p className="text-xs text-white/50 mb-3">{BASS_THIS_WEEK_DATE}</p>
+      <p className="text-xs text-white/50 mb-3">{weekLabel}</p>
       <div className={`flex gap-3 snap-x snap-mandatory ${SCROLL_TRACK}`}>
         {columns.map((col, ci) => (
           <div key={ci} className="shrink-0 snap-start w-[80vw] md:w-[26rem]">
