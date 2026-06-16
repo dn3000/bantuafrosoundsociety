@@ -12,27 +12,25 @@ import { SCROLL_TRACK } from './scrollTrack'
 
 // ── GENRE IMAGE CARDS ────────────────────────────────────────────────────────
 // Horizontal carousel of photo tiles, each labelled with the genre name.
-// TEMPORARY: photos are picsum placeholders + cards are display-only until the
-// genre filter backend lands. Swap photos for real genre art and wire each
-// card to a filter at that point.
+// Cards are display-only until the genre filter backend lands.
 
-type SampleGenre = { name: string; cover: string }
+type Genre = { name: string; cover: string }
 
-const SAMPLE_GENRES: SampleGenre[] = [
-  { name: 'Amapiano',      cover: 'https://picsum.photos/seed/genre-amapiano/300/180'  },
-  { name: 'Gqom',          cover: 'https://picsum.photos/seed/genre-gqom/300/180'      },
-  { name: '3 Step',        cover: 'https://picsum.photos/seed/genre-3step/300/180'     },
-  { name: 'Afro House',    cover: 'https://picsum.photos/seed/genre-afrohouse/300/180' },
-  { name: 'Deep House',    cover: 'https://picsum.photos/seed/genre-deephouse/300/180' },
-  { name: 'Afro Tech',     cover: 'https://picsum.photos/seed/genre-afrotech/300/180'  },
-  { name: 'Soulful House', cover: 'https://picsum.photos/seed/genre-soulful/300/180'   },
-  { name: 'Bacardi',       cover: 'https://picsum.photos/seed/genre-bacardi/300/180'   },
+const GENRES: Genre[] = [
+  { name: 'Afro House', cover: '/brand/afrohouse.png' },
+  { name: 'Amapiano',   cover: '/brand/amapiano.png'  },
+  { name: 'Gqom',       cover: '/brand/gqom.png'      },
+  { name: 'Afro Tech',  cover: '/brand/afrotech.png'  },
+  { name: '3-Step',     cover: '/brand/3step.png'     },
+  { name: 'Deep House', cover: '/brand/deephouse.png' },
+  { name: 'Soulful',    cover: '/brand/soulful.png'   },
+  { name: 'Bacardi',    cover: '/brand/bacardi.png'   },
 ]
 
 export function MobileGenrePills() {
   return (
     <div className={`mb-8 md:mb-14 flex gap-3 snap-x ${SCROLL_TRACK}`}>
-      {SAMPLE_GENRES.map((genre) => (
+      {GENRES.map((genre) => (
         <div
           key={genre.name}
           className="relative shrink-0 snap-start w-[150px] h-[90px] rounded-[12px] overflow-hidden"
