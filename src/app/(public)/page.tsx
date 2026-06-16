@@ -71,9 +71,9 @@ type CuratedPlaylist = {
 type BassMadePlaylist = {
   id: string
   name: string | null
+  curator_name: string | null
   cover_image_url: string | null
   image_url: string | null
-  track_count: number | null
 }
 
 type VideoRow = {
@@ -188,7 +188,7 @@ export default async function HomePage() {
   const [{ data: bassMadeRaw }, { data: playlistsRaw }] = await Promise.all([
     supabase
       .from('tracked_playlists')
-      .select('id, name, cover_image_url, image_url, track_count')
+      .select('id, name, curator_name, cover_image_url, image_url')
       .eq('is_published', true)
       .eq('is_bass_made', true)
       .order('display_order', { ascending: true })
@@ -211,10 +211,11 @@ export default async function HomePage() {
     .map((pl): MediaCardItem | null => {
       const imageUrl = pl.cover_image_url ?? pl.image_url
       if (!imageUrl) return null
+      const curator = pl.curator_name?.trim()
       return {
         id: pl.id,
         title: pl.name ?? 'Untitled Playlist',
-        subtitle: pl.track_count ? `BASS · ${pl.track_count} tracks` : 'BASS',
+        subtitle: curator ? `${curator} · BASS` : 'BASS',
         imageUrl,
         href: `/playlist/${pl.id}`,
       }
