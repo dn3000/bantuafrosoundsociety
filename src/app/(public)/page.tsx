@@ -40,6 +40,23 @@ const REF_TYPE_TO_CAROUSEL: Record<HeroItemRow['ref_type'], HeroCarouselItem['ty
   article: 'article',
 }
 
+// "Durban · Gqom" / "South Africa · Afro House". City wins; missing city falls
+// back to country (so an artist whose city equals their country, e.g. "South
+// Africa", renders as a single token — we pick one, never concatenate).
+// Subgenre is subgenres[0] (curated first = main). Returns "" if neither part
+// exists, in which case the card shows just the name.
+function buildSpotlightDescriptor(artist: {
+  city: string | null
+  country: string | null
+  subgenres: string[] | null
+}): string {
+  const city = artist.city?.trim() ?? ''
+  const country = artist.country?.trim() ?? ''
+  const location = city || country
+  const subgenre = artist.subgenres?.[0]?.trim() ?? ''
+  return [location, subgenre].filter(Boolean).join(' · ')
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type CuratedPlaylist = {
@@ -77,6 +94,15 @@ type ArticleRead = {
   excerpt: string | null
   source_name: string | null
   cover_image_url: string | null
+}
+
+type SpotlightArtistRow = {
+  id: string
+  name: string
+  image_url: string | null
+  city: string | null
+  country: string | null
+  subgenres: string[] | null
 }
 
 type ArticleLive = {
@@ -205,6 +231,31 @@ export default async function HomePage() {
     href: `/playlist/${pl.id}`,
   }))
 
+  // 4b. Artist Spotlight — hand-curated picks. limit(24) is generous because
+  // the list is editorial (admins rarely exceed ~12). Nulls-last on
+  // spotlight_order lets freshly-added rows (no order yet) sort to the end
+  // instead of leaping to the front.
+  const { data: spotlightRaw } = await supabase
+    .from('artists')
+    .select('id, name, image_url, city, country, subgenres')
+    .eq('is_spotlight', true)
+    .order('spotlight_order', { ascending: true, nullsFirst: false })
+    .limit(24)
+
+  const spotlightArtists = (spotlightRaw ?? []) as SpotlightArtistRow[]
+  const spotlightItems: MediaCardItem[] = spotlightArtists
+    .map((a): MediaCardItem | null => {
+      if (!a.image_url) return null
+      return {
+        id: a.id,
+        title: a.name,
+        subtitle: buildSpotlightDescriptor(a) || undefined,
+        imageUrl: a.image_url,
+        href: `/artists/${a.id}`,
+      }
+    })
+    .filter((it): it is MediaCardItem => it !== null)
+
   // 5. Watch: approved videos by category (mix / live_set / music_video), published_at desc
   const VIDEO_COLS = 'id, title, thumbnail_url, category, published_at, artists(name)'
   const VIDEO_ORDER = { ascending: false, nullsFirst: false } as const
@@ -304,7 +355,7 @@ export default async function HomePage() {
       <VideoCarousel title="Exclusive Sets" items={exclusiveSetItems} className="mb-14" />
       {/* 5. BASS Sets (real, fed by videos category=live_show) */}
       <VideoCarousel title="BASS Sets" items={bassSetItems} className="mb-14" />
-      <MobileArtistSpotlight />
+      <MobileArtistSpotlight items={spotlightItems} />
 
       {/* 7. Popular Playlists (real) */}
       <CardCarousel title="Popular Playlists" items={playlistItems} rows={1} shape="square" className="mb-14" />
