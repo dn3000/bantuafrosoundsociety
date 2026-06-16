@@ -243,6 +243,9 @@ export default async function HomePage() {
     .limit(24)
 
   const spotlightArtists = (spotlightRaw ?? []) as SpotlightArtistRow[]
+  // href omitted on purpose — there's no public artist detail page yet, so
+  // MediaCardRow renders these as non-interactive divs (no nav, no pointer
+  // cursor). Add href back once the read-only page lands.
   const spotlightItems: MediaCardItem[] = spotlightArtists
     .map((a): MediaCardItem | null => {
       if (!a.image_url) return null
@@ -251,7 +254,6 @@ export default async function HomePage() {
         title: a.name,
         subtitle: buildSpotlightDescriptor(a) || undefined,
         imageUrl: a.image_url,
-        href: `/artists/${a.id}`,
       }
     })
     .filter((it): it is MediaCardItem => it !== null)
