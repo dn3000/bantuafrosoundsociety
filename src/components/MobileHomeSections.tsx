@@ -195,63 +195,22 @@ export function MobileArtistSpotlight({ items }: { items: MediaCardItem[] }) {
 }
 
 // ── CHARTS ──────────────────────────────────────────────────────────────────
-// Vertical ranked list — front-end placeholder; trend tooling feeds it later.
-// Monochrome + single-accent: up = accent terracotta, down = white/40, same =
-// white/30, new = accent outline pill. No green/red.
-// TEMPORARY sample data + heading sub-line.
+// Vertical ranked list. Items are produced by the page.tsx query against
+// charts WHERE chart_key='shazam-za-dance' AND status='published'. Trend
+// deltas (up/down/new/same) aren't tracked yet — the row leads with rank +
+// cover + title + artist and links the whole section to /charts. The row
+// itself is a link to /charts so a tap anywhere drops the reader into the
+// full ranked list. Returns null on empty.
 
-const CHARTS_SUBLINE = 'Top Afro House · this week'
-
-type ChartTrack = {
+export type HomepageChartItem = {
+  id: string
   rank: number
-  coverUrl: string
   title: string
   artist: string
-  move: 'up' | 'down' | 'new' | 'same'
-  delta?: number
+  coverUrl: string | null
 }
 
-const SAMPLE_CHART_TRACKS: ChartTrack[] = [
-  { rank: 1, title: 'Sondela',           artist: 'DJ Stoks',         move: 'up',   delta: 2, coverUrl: 'https://picsum.photos/seed/ch-sondela/120/120' },
-  { rank: 2, title: 'Asibe Happy',       artist: 'Kabza De Small',   move: 'same',           coverUrl: 'https://picsum.photos/seed/ch-asibe/120/120'   },
-  { rank: 3, title: 'Ke Star',           artist: 'Focalistic',       move: 'up',   delta: 1, coverUrl: 'https://picsum.photos/seed/ch-kestar/120/120'  },
-  { rank: 4, title: 'Don Dada',          artist: 'Kelvin Momo',      move: 'new',            coverUrl: 'https://picsum.photos/seed/ch-dondada/120/120' },
-  { rank: 5, title: 'Ngiyazifela',       artist: 'Mas Musiq',        move: 'down', delta: 3, coverUrl: 'https://picsum.photos/seed/ch-ngiya/120/120'   },
-  { rank: 6, title: "Themba's Lament",   artist: 'Themba',           move: 'up',   delta: 5, coverUrl: 'https://picsum.photos/seed/ch-themba/120/120'  },
-  { rank: 7, title: 'Felele',            artist: 'De Mthuda',        move: 'down', delta: 1, coverUrl: 'https://picsum.photos/seed/ch-felele/120/120'  },
-  { rank: 8, title: 'Khusela',           artist: 'Daliwonga',        move: 'same',           coverUrl: 'https://picsum.photos/seed/ch-khusela/120/120' },
-]
-
-function ChartTrendChip({ move, delta }: { move: ChartTrack['move']; delta?: number }) {
-  if (move === 'up') {
-    return (
-      <span className="text-[var(--color-accent)] text-xs font-semibold tabular-nums shrink-0">
-        ▲{delta ?? ''}
-      </span>
-    )
-  }
-  if (move === 'down') {
-    return (
-      <span className="text-white/40 text-xs font-semibold tabular-nums shrink-0">
-        ▼{delta ?? ''}
-      </span>
-    )
-  }
-  if (move === 'new') {
-    return (
-      <span className="inline-block text-[10px] font-semibold uppercase tracking-wider text-[var(--color-accent)] border border-[var(--color-accent)] rounded-full px-1.5 py-0 shrink-0">
-        NEW
-      </span>
-    )
-  }
-  return (
-    <span className="text-white/30 text-sm shrink-0" aria-label="no change">
-      –
-    </span>
-  )
-}
-
-function ChartRow({ track, showDivider }: { track: ChartTrack; showDivider: boolean }) {
+function ChartRow({ track, showDivider }: { track: HomepageChartItem; showDivider: boolean }) {
   return (
     <div
       className={`flex items-center gap-3 py-2.5 ${
@@ -264,13 +223,17 @@ function ChartRow({ track, showDivider }: { track: ChartTrack; showDivider: bool
       >
         {track.rank}
       </span>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={track.coverUrl}
-        alt={track.title}
-        className="w-[46px] h-[46px] rounded-[8px] object-cover shrink-0"
-        loading="lazy"
-      />
+      {track.coverUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={track.coverUrl}
+          alt={track.title}
+          className="w-[46px] h-[46px] rounded-[8px] object-cover shrink-0"
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-[46px] h-[46px] rounded-[8px] bg-white/10 shrink-0" aria-hidden="true" />
+      )}
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-medium text-white line-clamp-1">
           {track.title}
@@ -279,29 +242,33 @@ function ChartRow({ track, showDivider }: { track: ChartTrack; showDivider: bool
           {track.artist}
         </p>
       </div>
-      <ChartTrendChip move={track.move} delta={track.delta} />
     </div>
   )
 }
 
-export function MobileCharts() {
-  if (SAMPLE_CHART_TRACKS.length === 0) return null
+export function MobileCharts({
+  items,
+  subline = 'South Africa · Dance · this week',
+}: {
+  items: HomepageChartItem[]
+  subline?: string
+}) {
+  if (items.length === 0) return null
   return (
     <section className="mb-10 md:mb-14">
-      <Link href="#" className="block">
-        {/* TODO route → /charts */}
+      <Link href="/charts" className="block">
         <SectionTitle title="Charts" className="mb-1" />
       </Link>
-      <p className="text-xs text-white/50 mb-3">{CHARTS_SUBLINE}</p>
-      <div className="md:max-w-2xl">
-        {SAMPLE_CHART_TRACKS.map((track, i) => (
+      <p className="text-xs text-white/50 mb-3">{subline}</p>
+      <Link href="/charts" className="block md:max-w-2xl group">
+        {items.map((track, i) => (
           <ChartRow
-            key={track.rank}
+            key={track.id}
             track={track}
-            showDivider={i < SAMPLE_CHART_TRACKS.length - 1}
+            showDivider={i < items.length - 1}
           />
         ))}
-      </div>
+      </Link>
     </section>
   )
 }

@@ -18,6 +18,7 @@ import {
   MobileEvents,
   MobileMerch,
   type BassThisWeekItem,
+  type HomepageChartItem,
 } from '@/components/MobileHomeSections'
 import { SiteFooter } from '@/components/SiteFooter'
 
@@ -132,6 +133,14 @@ type EventRow = {
   venue: string | null
   city: string | null
   poster_url: string | null
+}
+
+type ChartPublishedRow = {
+  id: string
+  position: number
+  title: string
+  artist_name: string
+  artwork_url: string | null
 }
 
 type BassThisWeekRow = {
@@ -360,6 +369,7 @@ export default async function HomePage() {
     { data: liveShowVideosRaw },
     { data: exclusiveSetVideosRaw },
     { data: eventsRaw },
+    { data: chartsRaw },
   ] = await Promise.all([
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'mix').order('published_at', VIDEO_ORDER).limit(12),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_set').eq('is_exclusive', false).order('published_at', VIDEO_ORDER).limit(12),
@@ -371,6 +381,11 @@ export default async function HomePage() {
     // would leak past events because 'past' is admin-set, not auto-derived,
     // so we filter on event_date >= now as well.
     supabase.from('events').select(EVENT_PUBLIC_COLUMNS).eq('status', 'published').gte('event_date', nowIso).order('event_date', { ascending: true }).limit(12),
+    // Top published chart rows for the SA Dance chart. RLS already filters
+    // to status='published' for anon, but we keep the explicit filter so
+    // the query is self-documenting and an authenticated session (e.g. an
+    // admin viewing the homepage) doesn't accidentally see drafts here.
+    supabase.from('charts').select('id, position, title, artist_name, artwork_url').eq('chart_key', 'shazam-za-dance').eq('status', 'published').order('position', { ascending: true }).limit(10),
   ])
 
   function toVideoItems(rows: VideoRow[]): VideoCarouselItem[] {
@@ -390,6 +405,16 @@ export default async function HomePage() {
   const podcastItems = toVideoItems((interviewVideosRaw ?? []) as unknown as VideoRow[])
   const bassSetItems = toVideoItems((liveShowVideosRaw ?? []) as unknown as VideoRow[])
   const exclusiveSetItems = toVideoItems((exclusiveSetVideosRaw ?? []) as unknown as VideoRow[])
+
+  // Charts row — map published rows into HomepageChartItem. MobileCharts
+  // returns null on empty so the section vanishes when nothing's published.
+  const chartItems: HomepageChartItem[] = ((chartsRaw ?? []) as ChartPublishedRow[]).map((r) => ({
+    id: r.id,
+    rank: r.position,
+    title: r.title,
+    artist: r.artist_name,
+    coverUrl: r.artwork_url,
+  }))
 
   // Events row — subtitle prefers venue (more specific), falls back to city.
   // MediaCardRow.imageUrl is non-nullable, so events without a poster are
@@ -488,7 +513,7 @@ export default async function HomePage() {
       <VideoCarousel title="Mixes" items={mixItems} className="mb-14" />
 
       {/* 12–13. Mobile-only Charts + Events */}
-      <MobileCharts />
+      <MobileCharts items={chartItems} />
       <MobileEvents items={eventItems} />
 
       {/* 14. Read (real, with Editor's Pick lead) */}

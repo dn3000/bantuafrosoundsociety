@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   House, User, Heart, Music4, Menu,
-  ChevronDown, X, BookOpen, Calendar, ShoppingBag, Info, Tv, LogIn,
+  ChevronDown, X, BookOpen, Calendar, ShoppingBag, Info, Tv, LogIn, BarChart3,
 } from 'lucide-react'
 
 const PRIMARY = [
@@ -18,6 +18,7 @@ const PRIMARY = [
 const MORE = [
   { href: '/watch', label: 'Watch', Icon: Tv },
   { href: '/read', label: 'Read', Icon: BookOpen },
+  { href: '/charts', label: 'Charts', Icon: BarChart3 },
   { href: '/events', label: 'Events', Icon: Calendar },
   { href: '/merch', label: 'Merch', Icon: ShoppingBag },
   { href: '/about', label: 'About', Icon: Info },
