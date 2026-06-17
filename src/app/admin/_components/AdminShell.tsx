@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
@@ -12,6 +12,7 @@ import {
   Database,
   Disc,
   FileText,
+  Inbox,
   Layers,
   LayoutDashboard,
   ListMusic,
@@ -28,13 +29,16 @@ import { Logo } from '@/components/Logo'
 
 const AUTH_ROUTES = ['/admin/login', '/admin/auth']
 
-type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean }
+type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean; badge?: boolean }
 type NavGroup = { label: string | null; items: NavItem[] }
 
 const NAV: NavGroup[] = [
   {
     label: null,
-    items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true }],
+    items: [
+      { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+      { href: '/admin/queue', label: 'Review queue', icon: Inbox, badge: true },
+    ],
   },
   {
     label: 'Content',
@@ -75,9 +79,11 @@ function isActive(pathname: string, href: string, exact?: boolean): boolean {
 function SidebarContent({
   pathname,
   onNavigate,
+  pendingCount,
 }: {
   pathname: string
   onNavigate?: () => void
+  pendingCount?: number | null
 }) {
   return (
     <div className="flex flex-col h-full">
@@ -113,7 +119,7 @@ function SidebarContent({
               </p>
             )}
             <ul className="space-y-0.5">
-              {group.items.map(({ href, label, icon: Icon, exact }) => {
+              {group.items.map(({ href, label, icon: Icon, exact, badge }) => {
                 const active = isActive(pathname, href, exact)
                 return (
                   <li key={href}>
@@ -128,7 +134,12 @@ function SidebarContent({
                       }`}
                     >
                       <Icon size={16} strokeWidth={active ? 2 : 1.5} />
-                      {label}
+                      <span className="flex-1">{label}</span>
+                      {badge && pendingCount ? (
+                        <span className="text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-fg-primary)]">
+                          {pendingCount}
+                        </span>
+                      ) : null}
                     </Link>
                   </li>
                 )
@@ -156,10 +167,29 @@ function SidebarContent({
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [pendingCount, setPendingCount] = useState<number | null>(null)
 
   const isAuthRoute = AUTH_ROUTES.some(
     (r) => pathname === r || pathname.startsWith(r + '/')
   )
+
+  // Keep the "Review queue" badge live — refreshes on every admin navigation so
+  // acting on items elsewhere is reflected when you return.
+  useEffect(() => {
+    if (isAuthRoute) return
+    let cancelled = false
+    fetch('/api/admin/queue?status=pending&limit=1')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.counts) {
+          setPendingCount((d.counts.pending_submissions ?? 0) + (d.counts.pending_videos ?? 0))
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthRoute, pathname])
 
   if (isAuthRoute) return <>{children}</>
 
@@ -167,7 +197,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col fixed inset-y-0 left-0 w-64 bg-[var(--color-bg-elevated)] border-r border-white/10 z-40">
-        <SidebarContent pathname={pathname} />
+        <SidebarContent pathname={pathname} pendingCount={pendingCount} />
       </aside>
 
       {/* Mobile top bar */}
@@ -218,6 +248,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               <SidebarContent
                 pathname={pathname}
                 onNavigate={() => setDrawerOpen(false)}
+                pendingCount={pendingCount}
               />
             </div>
           </aside>

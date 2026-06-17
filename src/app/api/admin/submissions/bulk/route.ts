@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth/requireAdmin'
+import { applySubmissionBulk, normaliseIds } from '@/lib/admin/reviewActions'
 
 // Bulk approve/reject for the submissions review queue.
 //
@@ -15,11 +16,12 @@ import { requireAdmin } from '@/lib/auth/requireAdmin'
 // published_at, so neither do we.
 //
 // The only addition is `rejection_reason`, written ONLY when a non-empty reason
-// is supplied with a reject. It is an audit field describing the verdict (not a
-// content column), and the bulk UI explicitly collects it. A reject with no
-// reason is byte-identical to the single-item reject. No content columns
-// (title, artwork_url, primary_artist_id, release_date, source, …) are ever
-// touched.
+// is supplied with a reject. A reject with no reason is byte-identical to the
+// single-item reject. No content columns are ever touched.
+//
+// The actual write lives in the shared `applySubmissionBulk` helper, which the
+// unified queue dispatcher (/api/admin/queue/bulk) also uses — one source of
+// truth for what an approve/reject writes.
 
 const MAX_IDS_PER_CALL = 1000
 
@@ -40,11 +42,10 @@ export async function POST(request: Request) {
   }
 
   // Validate + normalise ids: strings only, de-duplicated, non-empty.
-  const rawIds = Array.isArray(body.ids) ? body.ids : null
-  if (!rawIds) {
+  if (!Array.isArray(body.ids)) {
     return NextResponse.json({ error: 'ids must be an array' }, { status: 400 })
   }
-  const ids = Array.from(new Set(rawIds.filter((v): v is string => typeof v === 'string' && v.length > 0)))
+  const ids = normaliseIds(body.ids)
   if (ids.length === 0) {
     return NextResponse.json({ error: 'ids is empty' }, { status: 400 })
   }
@@ -55,28 +56,12 @@ export async function POST(request: Request) {
     )
   }
 
-  // Mirror the single-item PATCH exactly.
-  const updates: Record<string, unknown> = {
-    status: action === 'approve' ? 'approved' : 'rejected',
-    approved_by: user.id,
-    approved_at: new Date().toISOString(),
+  const reason = typeof body.reason === 'string' ? body.reason : undefined
+
+  try {
+    const { updated } = await applySubmissionBulk(supabase, ids, action, user.id, reason)
+    return NextResponse.json({ updated })
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Bulk update failed' }, { status: 500 })
   }
-
-  // Optional rejection reason — additive, reject-only, never on approve.
-  if (action === 'reject' && typeof body.reason === 'string') {
-    const reason = body.reason.trim()
-    if (reason) updates.rejection_reason = reason
-  }
-
-  const { data, error } = await supabase
-    .from('submissions')
-    .update(updates)
-    .in('id', ids)
-    .select('id')
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ updated: data?.length ?? 0 })
 }

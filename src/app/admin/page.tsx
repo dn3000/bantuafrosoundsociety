@@ -9,6 +9,13 @@ export default async function AdminDashboardPage() {
   const { data: liveRows } = await supabase.from('v_editorial_live').select('slot_id')
   const liveCount = liveRows?.length ?? 0
 
+  // Pending review backlog (submissions + videos) for the Review queue tile.
+  const [pendingSubsRes, pendingVidsRes] = await Promise.all([
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('videos').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+  ])
+  const pendingTotal = (pendingSubsRes.count ?? 0) + (pendingVidsRes.count ?? 0)
+
   return (
     <div className="min-h-screen bg-[var(--color-bg-base)] p-6 sm:p-10">
       <div className="max-w-5xl mx-auto">
@@ -33,6 +40,23 @@ export default async function AdminDashboardPage() {
         </header>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Link
+            href="/admin/queue"
+            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block ring-1 ring-[var(--color-accent)] sm:col-span-2"
+          >
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <h2 className="text-lg font-semibold text-[var(--color-fg-primary)]">Review queue</h2>
+              {pendingTotal > 0 && (
+                <span className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-fg-primary)]">
+                  {pendingTotal} pending
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-[var(--color-fg-secondary)]">
+              Unified curator&apos;s inbox — triage submissions &amp; videos, then promote to slots.
+            </p>
+          </Link>
+
           <Link
             href="/admin/artists"
             className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
