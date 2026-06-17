@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { getInitials, isRenderableImage, formatDate } from '@/lib/artist-display'
 
 type Artist = {
   id: string
@@ -38,37 +39,10 @@ type Artist = {
 
 export const dynamic = 'force-dynamic'
 
-function getInitials(name: string): string {
-  const cleaned = name.trim()
-  if (!cleaned) return '?'
-  const parts = cleaned.split(/\s+/).filter(Boolean)
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
-function isRenderableImage(url: string | null): boolean {
-  if (!url) return false
-  if (url === 'no_spotify_image') return false
-  return url.startsWith('http://') || url.startsWith('https://')
-}
-
 function isRealMbId(id: string | null): boolean {
   if (!id) return false
   if (id === 'not_in_musicbrainz') return false
   return true
-}
-
-function formatDate(iso: string | null): string | null {
-  if (!iso) return null
-  try {
-    return new Date(iso).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    })
-  } catch {
-    return null
-  }
 }
 
 export default async function ArtistDetailPage({
