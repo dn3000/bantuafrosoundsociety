@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { extractSpotifyArtistId, fetchSpotifyArtist } from '@/lib/spotify'
 import { claudeMessage, extractJsonFromText } from '@/lib/anthropic'
 
@@ -25,11 +25,8 @@ type EnrichmentResult = {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: { url?: string }
   try {

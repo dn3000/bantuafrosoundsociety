@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { getAccessToken } from '@/lib/spotify'
 
 const CHUNK_SIZE = 10  // Small chunks to stay well under Vercel limits
@@ -52,11 +52,8 @@ async function fetchSpotifyArtist(
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, user, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   // Find or create the active job
   let { data: job } = await supabase

@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdminPage } from '@/lib/auth/requireAdmin'
 import { getInitials, isRenderableImage, formatDate } from '@/lib/artist-display'
 
 type Artist = {
@@ -51,9 +50,7 @@ export default async function ArtistDetailPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/admin/login')
+  const { supabase } = await requireAdminPage()
 
   const { data: artist, error } = await supabase
     .from('artists')

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 
 // Cap for "select all matching" id collection. The true total always comes from
 // the exact count (so the UI shows the real number); `capped` flags the rare
@@ -17,11 +17,8 @@ function slugify(input: string): string {
 }
 
 export async function GET(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
   const search = searchParams.get('search')?.trim() || ''
@@ -94,11 +91,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, user, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: Record<string, unknown>
   try {

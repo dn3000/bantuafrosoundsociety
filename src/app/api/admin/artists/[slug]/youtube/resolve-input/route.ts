@@ -1,19 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { resolveChannelByInput } from '@/lib/youtube'
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: isAdmin } = await supabase.rpc('is_admin')
-  if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { error: authError } = await requireAdmin()
+  if (authError) return authError
 
   // Route is scoped to [slug] for consistency but resolution is artist-agnostic
   await context.params

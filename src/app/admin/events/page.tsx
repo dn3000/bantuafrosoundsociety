@@ -1,14 +1,9 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdminPage } from '@/lib/auth/requireAdmin'
 import { EventsAdminClient } from './_components/EventsAdminClient'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminEventsPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    redirect('/admin/login')
-  }
+  await requireAdminPage()
   return <EventsAdminClient />
 }

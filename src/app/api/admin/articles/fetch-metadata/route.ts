@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { parse } from 'node-html-parser'
 
 const FETCH_TIMEOUT_MS = 8_000
@@ -29,11 +29,8 @@ function ogOrMeta(root: ReturnType<typeof parse>, property: string, name: string
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: Record<string, unknown>
   try {

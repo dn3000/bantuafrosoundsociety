@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdminPage } from '@/lib/auth/requireAdmin'
 import { getSpotifyIntegrationMeta } from '@/lib/integrations'
 
 export const dynamic = 'force-dynamic'
@@ -10,9 +9,7 @@ export default async function IntegrationsPage({
 }: {
   searchParams: Promise<{ error?: string; connected?: string }>
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/admin/login')
+  await requireAdminPage()
 
   const params = await searchParams
   const meta = await getSpotifyIntegrationMeta()

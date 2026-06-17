@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { extractSpotifyPlaylistId, fetchSpotifyPlaylistMeta, type SpotifyPlaylistMeta } from '@/lib/spotify'
 
 // Add a Spotify playlist to the tracked list. Paste a playlist URL/URI/id; we
@@ -9,13 +9,8 @@ import { extractSpotifyPlaylistId, fetchSpotifyPlaylistMeta, type SpotifyPlaylis
 export const runtime = 'nodejs' // fetchSpotifyPlaylistMeta -> getAccessToken uses Buffer
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, user, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: Record<string, unknown>
   try {

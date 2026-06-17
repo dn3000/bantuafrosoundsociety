@@ -1,21 +1,14 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { categorizeVideo } from '@/lib/youtube'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST() {
-  const supabase = await createClient()
-
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const { data: adminCheck } = await supabase.rpc('is_admin')
-    if (!adminCheck) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const { supabase, error: authError } = await requireAdmin()
+    if (authError) return authError
 
     const { data: videos, error: fetchErr } = await supabase
       .from('videos')

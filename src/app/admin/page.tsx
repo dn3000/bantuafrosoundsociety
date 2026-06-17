@@ -1,15 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { requireAdminPage } from '@/lib/auth/requireAdmin'
 import Link from 'next/link'
 import { Logo } from '@/components/Logo'
 
 export default async function AdminDashboardPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/admin/login')
-  }
+  const { supabase, user } = await requireAdminPage()
 
   // Count slots that currently have a live assignment
   const { data: liveRows } = await supabase.from('v_editorial_live').select('slot_id')

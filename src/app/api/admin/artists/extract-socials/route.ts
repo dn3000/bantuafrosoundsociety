@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 
 const URL_PATTERNS: Array<{
   column: keyof ExtractedSocials
@@ -41,11 +41,8 @@ function extractFromNotes(notes: string | null): ExtractedSocials {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   // Fetch all artists with private_notes containing "Extra:" (MB enrichment marker)
   const { data: artists, error } = await supabase

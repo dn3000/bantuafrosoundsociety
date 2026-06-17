@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import {
   resolveHeroItems,
   type HeroItemRow,
@@ -9,11 +9,8 @@ import {
 const ALLOWED_REF_TYPES: HeroRefType[] = ['submission', 'video', 'playlist', 'article']
 
 export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   const { data, error } = await supabase
     .from('hero_items')
@@ -31,11 +28,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: Record<string, unknown>
   try {

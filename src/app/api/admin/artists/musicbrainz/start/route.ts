@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { lookupBySpotifyUrl, searchByName, type MusicBrainzArtist } from '@/lib/musicbrainz'
 
 const CHUNK_SIZE = 8  // ~9 seconds per chunk at 1.1s delay
@@ -40,11 +40,8 @@ function extractHandle(url: string | null, domain: string): string | null {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, user, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   // Find or create the active job
   let { data: job } = await supabase

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { CHART_SOURCES, type ChartKey } from '@/lib/shazam'
 
 // Admin GET / POST for the charts table.
@@ -63,11 +63,8 @@ function strOrNull(v: unknown): string | null {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function GET(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
   const chartKey = searchParams.get('chart_key')
@@ -107,11 +104,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: Record<string, unknown>
   try {

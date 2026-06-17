@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { parseSpotifyUrl, fetchSpotifyReleaseArtwork } from '@/lib/spotify'
 
 const ALLOWED_TYPES = ['single', 'release', 'mix', 'dj_set', 'playlist', 'video', 'podcast'] as const
@@ -18,11 +18,8 @@ const MAX_IDS = 5000
 const ARTIST_MATCH_CAP = 200
 
 export async function GET(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status') || ''
@@ -120,11 +117,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, user, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: Record<string, unknown>
   try {

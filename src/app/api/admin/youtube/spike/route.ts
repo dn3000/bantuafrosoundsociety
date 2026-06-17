@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import {
   resolveChannelByHandle,
   getChannelById,
@@ -11,18 +11,8 @@ type ArtistInput = { name: string; value: string }
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Gate to admins via the is_admin() security-definer function — no direct
-    // user_roles read.
-    const { data: admin } = await supabase.rpc('is_admin')
-    if (!admin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const { error: authError } = await requireAdmin()
+    if (authError) return authError
 
     // Fail fast with a readable message rather than a cryptic empty-body 500.
     if (!process.env.YOUTUBE_API_KEY) {

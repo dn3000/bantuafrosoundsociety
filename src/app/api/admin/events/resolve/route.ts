@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { parse, HTMLElement } from 'node-html-parser'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { utcIsoToSastLocal } from '@/lib/events'
 
 const FETCH_TIMEOUT_MS = 8000
@@ -445,11 +445,8 @@ function isQuicket(host: string): boolean {
 // ── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: { url?: unknown }
   try {

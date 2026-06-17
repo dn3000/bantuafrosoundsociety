@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 
 // Bulk approve/reject for the submissions review queue.
 //
@@ -24,23 +24,8 @@ import { createClient } from '@/lib/supabase/server'
 const MAX_IDS_PER_CALL = 1000
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  // Authorization mirrors the single-item PATCH /api/admin/submissions/[id]
-  // exactly: authenticate the request, then let the database enforce admin via
-  // the is_admin() RLS policy on `submissions` ("Admins can manage submissions"
-  // USING/WITH CHECK is_admin()). The UPDATE below runs under this same
-  // user-session client, so a non-admin matches zero rows ({ updated: 0 }) and
-  // writes nothing — identical to how every other admin route is gated.
-  //
-  // Do NOT reintroduce a direct user_roles read here: is_admin() is SECURITY
-  // DEFINER precisely so it can see user_roles, but the `authenticated` role has
-  // no SELECT grant on that table, so a direct read errors and 403s even a real
-  // admin. That bespoke check was the cause of the 403 this endpoint had.
+  const { supabase, user, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: Record<string, unknown>
   try {

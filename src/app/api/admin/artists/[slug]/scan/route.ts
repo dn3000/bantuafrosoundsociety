@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { getAccessToken } from '@/lib/spotify'
 import { DEFAULT_SINCE_DATE } from '@/lib/spotifyNewReleases'
 import { processArtistScrape } from '@/lib/spotifyArtistScrape'
@@ -16,10 +16,6 @@ import { processArtistScrape } from '@/lib/spotifyArtistScrape'
 // telemetry all key on id, so the scan button passes id too. Looking up by id
 // keeps the trigger lockstep with what the admin actually clicked on, instead
 // of round-tripping through a slug.
-//
-// Auth: same as the bulk scraper and the bulk track/untrack endpoint —
-// authenticate the request, then let RLS gate the writes via is_admin() on
-// artists/submissions. No bespoke user_roles read (that broke other endpoints).
 
 export const runtime = 'nodejs' // getAccessToken() uses Buffer
 export const dynamic = 'force-dynamic'
@@ -33,13 +29,8 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   const { slug: id } = await context.params
 

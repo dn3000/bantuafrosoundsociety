@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/requireAdmin'
 import { getAccessToken } from '@/lib/spotify'
 import { scrapePlaylist } from '@/lib/spotifyPlaylistScraper'
 
@@ -34,13 +34,8 @@ function isValidSinceDate(v: unknown): v is string {
 type PlaylistRow = { id: string; spotify_playlist_id: string; name: string | null }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { supabase, user, error: authError } = await requireAdmin()
+  if (authError) return authError
 
   let body: Record<string, unknown> = {}
   try {
