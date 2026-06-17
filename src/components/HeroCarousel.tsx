@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 
 export type HeroCarouselItem = {
@@ -17,28 +17,31 @@ export type HeroCarouselItem = {
 }
 
 const AUTO_MS = 5500
+const FADE_MS = 350
+
+// prefers-reduced-motion as an external store: SSR-safe (server assumes motion
+// is allowed) and avoids a setState-in-effect. Drives the slide-transition layer.
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
+function subscribeReducedMotion(onChange: () => void) {
+  const mq = window.matchMedia(REDUCED_MOTION_QUERY)
+  mq.addEventListener('change', onChange)
+  return () => mq.removeEventListener('change', onChange)
+}
+function getReducedMotion() {
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches
+}
 
 export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
   const n = items.length
 
   const [active, setActive] = useState(0)
   const [paused, setPaused] = useState(false)
-  const [noMotion, setNoMotion] = useState(false)
 
-  // Desktop text crossfade: displayActive lags 170 ms so right col fades out first
-  const [displayActive, setDisplayActive] = useState(0)
-  const [textOpacity, setTextOpacity] = useState(1)
+  // prefers-reduced-motion (SSR snapshot = false, i.e. motion allowed)
+  const noMotion = useSyncExternalStore(subscribeReducedMotion, getReducedMotion, () => false)
 
   // Mobile scroll container ref
   const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    setNoMotion(mq.matches)
-    const h = (e: MediaQueryListEvent) => setNoMotion(e.matches)
-    mq.addEventListener('change', h)
-    return () => mq.removeEventListener('change', h)
-  }, [])
 
   const go = useCallback((dir: 1 | -1) => setActive(i => (i + dir + n) % n), [n])
 
@@ -53,14 +56,6 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
       if (e.key === 'ArrowRight') { e.preventDefault(); go(1)  }
     },
   }
-
-  // Desktop text crossfade
-  useEffect(() => {
-    if (noMotion) { setDisplayActive(active); return }
-    setTextOpacity(0)
-    const t = setTimeout(() => { setDisplayActive(active); setTextOpacity(1) }, 170)
-    return () => clearTimeout(t)
-  }, [active, noMotion])
 
   // Unified auto-advance: mobile scrolls natively, desktop uses go(1)
   useEffect(() => {
@@ -120,12 +115,10 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
   // [clone-of-last, item0, item1, …, itemN-1, clone-of-first]
   const clonedItems = [items[n - 1], ...items, items[0]]
 
-  const cur = items[displayActive]
-  const curHref = items[active].href
-  const fadeStyle = {
-    opacity: textOpacity,
-    transition: noMotion ? 'none' : 'opacity 170ms ease',
-  }
+  // Swift, subtle crossfade applied in sync to the image + text + NEXT strip.
+  // Reduced motion → swaps are instant (no transition). Single source of truth
+  // for the slide-transition layer.
+  const crossfade = noMotion ? 'none' : `opacity ${FADE_MS}ms ease-out`
 
   return (
     <section
@@ -136,7 +129,7 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
     >
 
       {/* ═══════════════════════════════════════════════════════════════════
-          DESKTOP  md+  — two-column editorial panel (unchanged)
+          DESKTOP  md+  — two-column editorial panel; slides crossfade in place
           ═══════════════════════════════════════════════════════════════════ */}
       <div
         className="hidden md:flex rounded-[var(--radius-lg)] overflow-hidden"
@@ -145,10 +138,10 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
         aria-atomic="false"
       >
 
-        {/* Left ½ — image with pull-focus scale transition */}
+        {/* Left ½ — image, crossfades in sync with the text (opacity only) */}
         <div className="flex-shrink-0 flex p-3" style={{ width: '48%' }}>
           <Link
-            href={curHref}
+            href={items[active].href}
             className="flex-1 relative focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]"
             style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', display: 'block' }}
             aria-label={`Open ${items[active].title}`}
@@ -159,9 +152,8 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
                 className="absolute inset-0"
                 style={{
                   opacity: idx === active ? 1 : 0,
-                  transform: idx === active ? 'scale(1)' : 'scale(1.04)',
                   zIndex: idx === active ? 1 : 0,
-                  transition: noMotion ? 'none' : 'opacity 550ms ease, transform 550ms ease',
+                  transition: crossfade,
                 }}
                 aria-hidden={idx !== active}
               >
@@ -177,102 +169,131 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
           </Link>
         </div>
 
-        {/* Right ½ — text + NEXT strip */}
+        {/* Right ½ — text + NEXT strip. Both regions stack every slide into a
+            single grid cell (grid-area 1/1), so each region's height is the max
+            across all slides — constant regardless of the active index — and
+            opacity crossfades between them. The card background + divider live
+            outside the stacks, so they never fade. */}
         <div className="flex-1 flex flex-col min-w-0 p-5 gap-4">
 
-          <div className="flex flex-col gap-2" style={fadeStyle}>
-            <p
-              className="text-[10px] uppercase tracking-[0.12em] font-semibold"
-              style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-sans)' }}
-            >
-              {cur.kicker}
-            </p>
-            <Link href={cur.href} className="focus:outline-none focus-visible:underline">
-              <h2
-                className="font-bold leading-snug line-clamp-3"
-                style={{
-                  fontFamily: 'var(--font-heading)',
-                  fontSize: '1.0625rem',
-                  color: 'var(--color-fg-primary)',
-                }}
+          <div className="grid grid-cols-1">
+            {items.map((item, idx) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-2 min-w-0"
+                style={{ gridArea: '1 / 1', opacity: idx === active ? 1 : 0, transition: crossfade }}
+                aria-hidden={idx !== active}
+                inert={idx !== active}
               >
-                {cur.headline}
-              </h2>
-            </Link>
-            <div className="flex flex-col gap-0.5 mt-1">
-              <TypeBadge>{cur.typeBadge}</TypeBadge>
-              <p
-                className="font-bold text-sm leading-snug"
-                style={{ color: 'var(--color-fg-primary)', fontFamily: 'var(--font-heading)' }}
-              >
-                {cur.title}
-              </p>
-              <p
-                className="text-sm leading-snug"
-                style={{ color: 'var(--color-fg-secondary)', fontFamily: 'var(--font-sans)' }}
-              >
-                {cur.artist}
-              </p>
-              <p
-                className="text-xs"
-                style={{ color: 'var(--color-fg-tertiary)', fontFamily: 'var(--font-sans)' }}
-              >
-                {cur.date}
-              </p>
-            </div>
+                <p
+                  className="text-[10px] uppercase tracking-[0.12em] font-semibold"
+                  style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-sans)' }}
+                >
+                  {item.kicker}
+                </p>
+                <Link href={item.href} className="focus:outline-none focus-visible:underline">
+                  {/* Reserve exactly 2 lines (2 × leading-snug 1.375 = 2.75em):
+                      1-line titles sit top-aligned with space below; 3+ clamp
+                      with ellipsis. Keeps the panel geometry fixed across slides. */}
+                  <h2
+                    className="font-bold leading-snug line-clamp-2 min-h-[2.75em]"
+                    style={{
+                      fontFamily: 'var(--font-heading)',
+                      fontSize: '1.0625rem',
+                      color: 'var(--color-fg-primary)',
+                    }}
+                  >
+                    {item.headline}
+                  </h2>
+                </Link>
+                <div className="flex flex-col gap-0.5 mt-1">
+                  <TypeBadge>{item.typeBadge}</TypeBadge>
+                  <p
+                    className="font-bold text-sm leading-snug"
+                    style={{ color: 'var(--color-fg-primary)', fontFamily: 'var(--font-heading)' }}
+                  >
+                    {item.title}
+                  </p>
+                  <p
+                    className="text-sm leading-snug"
+                    style={{ color: 'var(--color-fg-secondary)', fontFamily: 'var(--font-sans)' }}
+                  >
+                    {item.artist}
+                  </p>
+                  <p
+                    className="text-xs"
+                    style={{ color: 'var(--color-fg-tertiary)', fontFamily: 'var(--font-sans)' }}
+                  >
+                    {item.date}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="flex-1" />
           <div className="h-px flex-shrink-0" style={{ background: 'var(--color-border-default)' }} />
 
-          {/* NEXT strip */}
-          <div style={fadeStyle}>
+          {/* NEXT strip — the label is static; only the 3 cards crossfade */}
+          <div>
             <p
               className="text-[9px] uppercase tracking-[0.12em] font-bold mb-2.5"
               style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-sans)' }}
             >
               NEXT
             </p>
-            <div className="flex gap-2.5">
-              {[1, 2, 3].map(offset => {
-                const item = items[(displayActive + offset) % n]
-                return (
-                  <Link
-                    key={`next-${offset}`}
-                    href={item.href}
-                    className="flex-1 min-w-0 group focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)] rounded-[8px]"
-                    role="group"
-                    aria-roledescription="slide"
-                    aria-label={`${offset + 1} ahead: ${item.title}`}
-                  >
-                    <div
-                      className="overflow-hidden mb-1.5 group-hover:opacity-80 transition-opacity duration-[var(--animate-fast)]"
-                      style={{ borderRadius: 8, aspectRatio: '1 / 1' }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={item.imageUrl}
-                        alt={item.title}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    </div>
-                    <p
-                      className="text-[11px] font-semibold leading-snug line-clamp-2 mb-0.5"
-                      style={{ color: 'var(--color-fg-primary)', fontFamily: 'var(--font-sans)' }}
-                    >
-                      {item.title}
-                    </p>
-                    <p
-                      className="text-[10px] mb-1.5"
-                      style={{ color: 'var(--color-fg-tertiary)', fontFamily: 'var(--font-sans)' }}
-                    >
-                      {item.date}
-                    </p>
-                    <TypeBadge small>{item.typeBadge}</TypeBadge>
-                  </Link>
-                )
-              })}
+            <div className="grid grid-cols-1">
+              {items.map((slide, idx) => (
+                <div
+                  key={slide.id}
+                  className="min-w-0"
+                  style={{ gridArea: '1 / 1', opacity: idx === active ? 1 : 0, transition: crossfade }}
+                  aria-hidden={idx !== active}
+                  inert={idx !== active}
+                >
+                  <div className="flex gap-2.5">
+                    {[1, 2, 3].map(offset => {
+                      const item = items[(idx + offset) % n]
+                      return (
+                        <Link
+                          key={`next-${offset}`}
+                          href={item.href}
+                          className="flex-1 min-w-0 group focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)] rounded-[8px]"
+                          role="group"
+                          aria-roledescription="slide"
+                          aria-label={`${offset + 1} ahead: ${item.title}`}
+                        >
+                          <div
+                            className="overflow-hidden mb-1.5 group-hover:opacity-80 transition-opacity duration-[var(--animate-fast)]"
+                            style={{ borderRadius: 8, aspectRatio: '1 / 1' }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                          <p
+                            className="text-[11px] font-semibold leading-snug line-clamp-2 mb-0.5"
+                            style={{ color: 'var(--color-fg-primary)', fontFamily: 'var(--font-sans)' }}
+                          >
+                            {item.title}
+                          </p>
+                          <p
+                            className="text-[10px] mb-1.5"
+                            style={{ color: 'var(--color-fg-tertiary)', fontFamily: 'var(--font-sans)' }}
+                          >
+                            {item.date}
+                          </p>
+                          <TypeBadge small>{item.typeBadge}</TypeBadge>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -321,9 +342,9 @@ export function HeroCarousel({ items }: { items: HeroCarouselItem[] }) {
                 {item.kicker}
               </p>
 
-              {/* Headline */}
+              {/* Headline — reserve 2 lines so card images align across the row */}
               <p
-                className="font-bold leading-snug line-clamp-2 mb-2.5"
+                className="font-bold leading-snug line-clamp-2 min-h-[2.75em] mb-2.5"
                 style={{
                   fontFamily: 'var(--font-heading)',
                   fontSize: '0.875rem',
