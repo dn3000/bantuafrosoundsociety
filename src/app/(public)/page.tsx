@@ -8,6 +8,7 @@ import type { MediaCardItem } from '@/components/MediaCardRow'
 import { VideoCarousel, type VideoCarouselItem } from '@/components/VideoCarousel'
 import { HeroCarousel, type HeroCarouselItem } from '@/components/HeroCarousel'
 import { resolveHeroItems, type HeroItemRow } from '@/lib/hero'
+import { EVENT_PUBLIC_COLUMNS, formatEventBadge } from '@/lib/events'
 import {
   MobileGenrePills,
   MobileBassMade,
@@ -121,6 +122,16 @@ type SpotlightArtistRow = {
   city: string | null
   country: string | null
   subgenres: string[] | null
+}
+
+type EventRow = {
+  id: string
+  slug: string
+  title: string
+  event_date: string
+  venue: string | null
+  city: string | null
+  poster_url: string | null
 }
 
 type BassThisWeekRow = {
@@ -339,6 +350,8 @@ export default async function HomePage() {
   const VIDEO_COLS = 'id, title, thumbnail_url, category, published_at, artists(name)'
   const VIDEO_ORDER = { ascending: false, nullsFirst: false } as const
 
+  const nowIso = new Date().toISOString()
+
   const [
     { data: mixVideosRaw },
     { data: liveSetVideosRaw },
@@ -346,6 +359,7 @@ export default async function HomePage() {
     { data: interviewVideosRaw },
     { data: liveShowVideosRaw },
     { data: exclusiveSetVideosRaw },
+    { data: eventsRaw },
   ] = await Promise.all([
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'mix').order('published_at', VIDEO_ORDER).limit(12),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_set').eq('is_exclusive', false).order('published_at', VIDEO_ORDER).limit(12),
@@ -353,6 +367,10 @@ export default async function HomePage() {
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'interview').order('published_at', VIDEO_ORDER).limit(12),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_show').eq('is_exclusive', false).order('published_at', VIDEO_ORDER).limit(12),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('is_exclusive', true).order('published_at', VIDEO_ORDER).limit(12),
+    // Upcoming events for the homepage Events row. status='published' alone
+    // would leak past events because 'past' is admin-set, not auto-derived,
+    // so we filter on event_date >= now as well.
+    supabase.from('events').select(EVENT_PUBLIC_COLUMNS).eq('status', 'published').gte('event_date', nowIso).order('event_date', { ascending: true }).limit(12),
   ])
 
   function toVideoItems(rows: VideoRow[]): VideoCarouselItem[] {
@@ -372,6 +390,24 @@ export default async function HomePage() {
   const podcastItems = toVideoItems((interviewVideosRaw ?? []) as unknown as VideoRow[])
   const bassSetItems = toVideoItems((liveShowVideosRaw ?? []) as unknown as VideoRow[])
   const exclusiveSetItems = toVideoItems((exclusiveSetVideosRaw ?? []) as unknown as VideoRow[])
+
+  // Events row — subtitle prefers venue (more specific), falls back to city.
+  // MediaCardRow.imageUrl is non-nullable, so events without a poster are
+  // dropped from the row (they still appear on /events with an initials tile).
+  const eventRows = (eventsRaw ?? []) as EventRow[]
+  const eventItems: MediaCardItem[] = eventRows
+    .map((ev): MediaCardItem | null => {
+      if (!ev.poster_url) return null
+      return {
+        id: ev.id,
+        title: ev.title,
+        subtitle: ev.venue ?? ev.city ?? undefined,
+        imageUrl: ev.poster_url,
+        href: `/events/${ev.slug}`,
+        badge: formatEventBadge(ev.event_date),
+      }
+    })
+    .filter((it): it is MediaCardItem => it !== null)
 
   // 6. Recent published articles for the Read carousel
   const { data: articlesRaw } = await supabase
@@ -453,7 +489,7 @@ export default async function HomePage() {
 
       {/* 12–13. Mobile-only Charts + Events */}
       <MobileCharts />
-      <MobileEvents />
+      <MobileEvents items={eventItems} />
 
       {/* 14. Read (real, with Editor's Pick lead) */}
       {(pickReadArticle || readItems.length > 0) && (

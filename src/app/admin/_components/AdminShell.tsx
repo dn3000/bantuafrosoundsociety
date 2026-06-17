@@ -7,6 +7,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeft,
   BookOpen,
+  Calendar,
   Database,
   Disc,
   FileText,
@@ -41,6 +42,7 @@ const NAV: NavGroup[] = [
       { href: '/admin/submissions', label: 'Submissions', icon: FileText },
       { href: '/admin/videos', label: 'Videos', icon: Video },
       { href: '/admin/articles', label: 'Articles', icon: BookOpen },
+      { href: '/admin/events', label: 'Events', icon: Calendar },
     ],
   },
   {

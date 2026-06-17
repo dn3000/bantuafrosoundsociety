@@ -308,24 +308,16 @@ export function MobileCharts() {
 
 // ── EVENTS ───────────────────────────────────────────────────────────────────
 // Portrait poster cards; date carried as the existing badge pill (top-left).
-// TEMPORARY sample data — replaced once the events feed lands.
+// Items resolve in page.tsx from the events table (status='published' AND
+// event_date >= now()). MediaCardRow hides on empty, so the row disappears
+// when no upcoming events are scheduled.
 
-const SAMPLE_EVENTS: MediaCardItem[] = [
-  // TODO route — individual hrefs stub to "#"
-  { id: 'ev-1', title: 'Black Coffee Live',                  subtitle: 'CTICC · Cape Town',        badge: 'JUL 6',  imageUrl: 'https://picsum.photos/seed/ev-blackcoffee/400/533', href: '#' },
-  { id: 'ev-2', title: 'Major League DJz: Soweto Edition',   subtitle: 'FNB Stadium · Soweto',     badge: 'AUG 14', imageUrl: 'https://picsum.photos/seed/ev-mldjz/400/533',       href: '#' },
-  { id: 'ev-3', title: 'Uncle Waffles: Lagos Takeover',      subtitle: 'Eko Convention · Lagos',   badge: 'JUL 22', imageUrl: 'https://picsum.photos/seed/ev-waffles/400/533',     href: '#' },
-  { id: 'ev-4', title: 'DBN Gogo at Moses Mabhida',          subtitle: 'Moses Mabhida · Durban',   badge: 'AUG 2',  imageUrl: 'https://picsum.photos/seed/ev-dbngogo/400/533',     href: '#' },
-  { id: 'ev-5', title: 'Themba: Modern Africa Live',         subtitle: 'Carfax · Joburg',          badge: 'SEP 5',  imageUrl: 'https://picsum.photos/seed/ev-themba/400/533',      href: '#' },
-  { id: 'ev-6', title: 'Kabza De Small: Europe Tour',        subtitle: 'Paradiso · Amsterdam',     badge: 'JUL 27', imageUrl: 'https://picsum.photos/seed/ev-kabza/400/533',       href: '#' },
-]
-
-export function MobileEvents() {
+export function MobileEvents({ items }: { items: MediaCardItem[] }) {
   return (
     <MediaCardRow
       title="Events"
-      href="#" // TODO route
-      items={SAMPLE_EVENTS}
+      href="/events"
+      items={items}
       aspect="portrait"
       cardWidth="w-[52vw] md:w-52"
     />
