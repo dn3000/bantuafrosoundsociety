@@ -131,7 +131,6 @@ async function resolvePrimaryArtistId(
     status: 'active',
     is_tracked: false,
     source_method: 'bulk_import',
-    added_by: addedBy,
   }
   const { data: created, error: insErr } = await supabase
     .from('artists')
@@ -152,6 +151,15 @@ async function resolvePrimaryArtistId(
       return again.id as string
     }
     throw new Error(`artist create: ${insErr?.message ?? 'no row returned'}`)
+  }
+  // added_by moved to artists_private. Best-effort: the artist row (needed for
+  // submission FKs) already exists, and a missing private row self-heals on the
+  // next admin edit (PATCH upserts it), so we don't fail the whole scan over it.
+  const { error: privErr } = await supabase
+    .from('artists_private')
+    .insert({ artist_id: created.id, added_by: addedBy })
+  if (privErr) {
+    console.error(`artists_private create for ${created.id}: ${privErr.message}`)
   }
   cache.set(sid, created.id as string)
   return created.id as string

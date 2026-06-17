@@ -44,11 +44,30 @@ export async function POST(request: Request) {
   const { supabase, error: authError } = await requireAdmin()
   if (authError) return authError
 
-  // Fetch all artists with private_notes containing "Extra:" (MB enrichment marker)
-  const { data: artists, error } = await supabase
-    .from('artists')
-    .select('id, name, private_notes, bandcamp_url, soundcloud_url, discogs_url, wikipedia_url, youtube_url')
+  // private_notes moved to artists_private — find the artists whose notes carry
+  // the MB "Extra:" marker there, then pull their current social columns from
+  // artists (only NULL columns get filled).
+  const { data: privRows, error: privError } = await supabase
+    .from('artists_private')
+    .select('artist_id, private_notes')
     .like('private_notes', '%Extra:%')
+
+  if (privError) {
+    return NextResponse.json({ error: privError.message }, { status: 500 })
+  }
+
+  const notesById = new Map<string, string | null>()
+  for (const row of privRows ?? []) {
+    notesById.set(row.artist_id as string, row.private_notes as string | null)
+  }
+  const ids = [...notesById.keys()]
+
+  const { data: artists, error } = ids.length
+    ? await supabase
+        .from('artists')
+        .select('id, name, bandcamp_url, soundcloud_url, discogs_url, wikipedia_url, youtube_url')
+        .in('id', ids)
+    : { data: [], error: null }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -66,7 +85,7 @@ export async function POST(request: Request) {
 
   for (const artist of artists ?? []) {
     processedCount++
-    const extracted = extractFromNotes(artist.private_notes as string | null)
+    const extracted = extractFromNotes(notesById.get(artist.id as string) ?? null)
     const updates: Partial<ExtractedSocials> = {}
 
     // Only set fields where current value is NULL

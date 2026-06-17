@@ -125,8 +125,6 @@ export async function POST(request: Request) {
     bio: typeof body.bio === 'string' ? body.bio.trim() || null : null,
     image_url: typeof body.image_url === 'string' ? body.image_url.trim() || null : null,
     spotify_artist_id: typeof body.spotify_artist_id === 'string' ? body.spotify_artist_id.trim() || null : null,
-    private_notes: typeof body.private_notes === 'string' ? body.private_notes.trim() || null : null,
-    added_by: user.id,
   }
 
   const { data, error } = await supabase
@@ -137,6 +135,25 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // PII (private_notes, added_by) lives in artists_private. Insert it as a
+  // second phase; if it fails, roll back the just-created artists row so we
+  // never leave an artist without its private record (Supabase JS has no
+  // multi-statement transaction).
+  const { error: privError } = await supabase.from('artists_private').insert({
+    artist_id: data.id,
+    added_by: user.id,
+    private_notes:
+      typeof body.private_notes === 'string' ? body.private_notes.trim() || null : null,
+  })
+
+  if (privError) {
+    await supabase.from('artists').delete().eq('id', data.id)
+    return NextResponse.json(
+      { error: `Failed to save artist PII, no artist created: ${privError.message}` },
+      { status: 500 },
+    )
   }
 
   return NextResponse.json({ artist: data }, { status: 201 })

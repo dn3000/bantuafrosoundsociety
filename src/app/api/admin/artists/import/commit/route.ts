@@ -106,7 +106,6 @@ export async function POST(request: Request) {
       status,
       is_tracked: isTracked,
       source_method: 'bulk_import',
-      added_by: user.id,
     }
   })
 
@@ -117,6 +116,24 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // added_by now lives on artists_private. Create one private row per newly
+  // inserted artist (uniform added_by, so insertion order doesn't matter). If
+  // this fails, roll back the just-inserted artists so we don't leave orphans
+  // without a private record.
+  const insertedIds = (inserted ?? []).map((r) => r.id as string)
+  if (insertedIds.length > 0) {
+    const { error: privError } = await supabase
+      .from('artists_private')
+      .insert(insertedIds.map((id) => ({ artist_id: id, added_by: user.id })))
+    if (privError) {
+      await supabase.from('artists').delete().in('id', insertedIds)
+      return NextResponse.json(
+        { error: `Failed to save artist PII, import rolled back: ${privError.message}` },
+        { status: 500 },
+      )
+    }
   }
 
   return NextResponse.json({

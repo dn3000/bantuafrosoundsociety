@@ -7,14 +7,14 @@ import { createClient } from '@/lib/supabase/server'
 import { getInitials, isRenderableImage } from '@/lib/artist-display'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-// Safe columns only — PII (email, manager_*, booking_agency, last_contacted_at,
-// relationship_status, private_notes, added_by) is never selected here.
+// Safe columns only — PII (real_name, email, manager_*, booking_agency,
+// last_contacted_at, relationship_status, private_notes, added_by) lives in the
+// admin-only artists_private table and is never selected here.
 
 type Artist = {
   id: string
   slug: string
   name: string
-  real_name: string | null
   aliases: string[] | null
   bio: string | null
   image_url: string | null
@@ -66,7 +66,7 @@ type Video = {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ARTIST_COLUMNS = [
-  'id, slug, name, real_name, aliases, bio, image_url, country, city, subgenres, active_years',
+  'id, slug, name, aliases, bio, image_url, country, city, subgenres, active_years',
   'tier, is_verified, is_spotlight',
   'spotify_artist_id, apple_music_artist_id, beatport_artist_url, bandcamp_url',
   'soundcloud_handle, soundcloud_url, mixcloud_handle',
@@ -433,11 +433,6 @@ export default async function ArtistDetailPage({
           <h1 className="text-3xl sm:text-4xl font-bold text-[var(--color-fg-primary)] leading-tight mb-2">
             {artist.name}
           </h1>
-          {artist.real_name && artist.real_name.trim() !== artist.name.trim() && (
-            <p className="text-[var(--color-fg-secondary)] text-base mb-2">
-              {artist.real_name}
-            </p>
-          )}
           {location && (
             <p className="text-xs uppercase tracking-widest text-[var(--color-fg-tertiary)] font-semibold mb-4">
               {location}

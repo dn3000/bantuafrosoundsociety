@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { requireAdminPage } from '@/lib/auth/requireAdmin'
+import { mergeArtistPrivate } from '@/lib/artistPii'
 import { getInitials, isRenderableImage, formatDate } from '@/lib/artist-display'
 
 type Artist = {
@@ -76,7 +77,14 @@ export default async function ArtistDetailPage({
     )
   }
 
-  const a = artist as Artist
+  // PII (relationship_status, private_notes) now lives in artists_private —
+  // fetch and merge so the rest of the page renders unchanged.
+  const { data: priv } = await supabase
+    .from('artists_private')
+    .select('*')
+    .eq('artist_id', artist.id)
+    .maybeSingle()
+  const a = mergeArtistPrivate(artist, priv) as unknown as Artist
   const renderable = isRenderableImage(a.image_url)
   const initials = getInitials(a.name)
   const hasMb = isRealMbId(a.musicbrainz_artist_id)

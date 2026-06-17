@@ -144,7 +144,7 @@ export async function POST(request: Request) {
   // Fetch next chunk of candidates
   const { data: candidates } = await supabase
     .from('artists')
-    .select('id, name, spotify_artist_id, private_notes')
+    .select('id, name, spotify_artist_id')
     .not('spotify_artist_id', 'is', null)
     .is('image_url', null)
     .limit(CHUNK_SIZE)
@@ -164,6 +164,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ jobId: job.id, done: true, message: 'Backfill complete' })
   }
 
+  // private_notes lives in artists_private now — load the chunk's existing notes
+  // so we can append audit lines and write them back to the sister table.
+  const notesById = new Map<string, string | null>()
+  {
+    const { data: privRows } = await supabase
+      .from('artists_private')
+      .select('artist_id, private_notes')
+      .in('artist_id', targets.map((t) => t.id))
+    for (const row of privRows ?? []) {
+      notesById.set(row.artist_id as string, row.private_notes as string | null)
+    }
+  }
+
   let successCount = job.success_count
   let errorCount = job.error_count
   let lastError: string | null = job.last_error
@@ -176,22 +189,29 @@ export async function POST(request: Request) {
 
     if (result.ok) {
       const auditLine = `Backfilled ${today}: Spotify followers ${result.followers.toLocaleString()}, popularity ${result.popularity}`
-      const newNotes = artist.private_notes
-        ? `${artist.private_notes}\n${auditLine}`
-        : auditLine
+      const currentNotes = notesById.get(artist.id as string) ?? null
+      const newNotes = currentNotes ? `${currentNotes}\n${auditLine}` : auditLine
 
+      // Public columns -> artists; the audit note -> artists_private.
       const { error: updateError } = await supabase
         .from('artists')
         .update({
           image_url: result.imageUrl || 'no_spotify_image',
           spotify_genres: result.genres,
-          private_notes: newNotes,
         })
         .eq('id', artist.id)
 
-      if (updateError) {
+      let noteError: { message: string } | null = null
+      if (!updateError) {
+        const res = await supabase
+          .from('artists_private')
+          .upsert({ artist_id: artist.id, private_notes: newNotes }, { onConflict: 'artist_id' })
+        noteError = res.error
+      }
+
+      if (updateError || noteError) {
         errorCount++
-        lastError = `${artist.name}: DB update - ${updateError.message}`
+        lastError = `${artist.name}: DB update - ${(updateError ?? noteError)!.message}`
       } else {
         successCount++
       }
@@ -204,15 +224,21 @@ export async function POST(request: Request) {
       // Non-429 error — mark sentinel and move on (don't retry next chunk)
       errorCount++
       lastError = `${artist.name}: ${result.error}`
+      const currentNotes = notesById.get(artist.id as string) ?? null
+      const sentinelLine = `Backfill ${today}: no_spotify_image (${result.error.slice(0, 80)})`
       await supabase
         .from('artists')
-        .update({
-          image_url: 'no_spotify_image',
-          private_notes: artist.private_notes
-            ? `${artist.private_notes}\nBackfill ${today}: no_spotify_image (${result.error.slice(0, 80)})`
-            : `Backfill ${today}: no_spotify_image (${result.error.slice(0, 80)})`,
-        })
+        .update({ image_url: 'no_spotify_image' })
         .eq('id', artist.id)
+      await supabase
+        .from('artists_private')
+        .upsert(
+          {
+            artist_id: artist.id,
+            private_notes: currentNotes ? `${currentNotes}\n${sentinelLine}` : sentinelLine,
+          },
+          { onConflict: 'artist_id' },
+        )
     }
 
     lastArtistName = artist.name

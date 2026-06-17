@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth/requireAdmin'
+import { mergeArtistPrivate, splitArtistUpdates } from '@/lib/artistPii'
 
 const ALLOWED_TIERS = ['featured', 'active', 'watch']
 const ALLOWED_STATUSES = ['active', 'inactive', 'hiatus']
@@ -14,7 +15,6 @@ const EDITABLE_FIELDS = [
   'spotify_artist_id', 'musicbrainz_artist_id',
   'youtube_channel_id', 'youtube_topic_channel_id',
   'private_notes',
-  'last_release_date', 'last_contact_date',
 ] as const
 
 type EditableField = (typeof EDITABLE_FIELDS)[number]
@@ -40,7 +40,18 @@ export async function GET(
     return NextResponse.json({ error: 'Artist not found' }, { status: 404 })
   }
 
-  return NextResponse.json({ artist })
+  // PII now lives in artists_private — fetch and merge so callers get the same
+  // flat artist shape they did before the split.
+  const { data: priv, error: privError } = await supabase
+    .from('artists_private')
+    .select('*')
+    .eq('artist_id', artist.id)
+    .maybeSingle()
+  if (privError) {
+    return NextResponse.json({ error: privError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ artist: mergeArtistPrivate(artist, priv) })
 }
 
 export async function PATCH(
@@ -98,16 +109,69 @@ export async function PATCH(
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
   }
 
-  const { data, error } = await supabase
-    .from('artists')
-    .update(updates)
-    .eq('slug', slug)
-    .select('*')
-    .single()
+  // Route each field to its table: public columns stay on artists, PII goes to
+  // artists_private.
+  const { publicUpdates, privateUpdates } = splitArtistUpdates(updates)
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  // Resolve the artist row (and its id). When there are public columns to
+  // change, do that update and reuse the returned row; otherwise just look the
+  // artist up so we can target its private row.
+  let artistRow: Record<string, unknown> | null
+  if (Object.keys(publicUpdates).length > 0) {
+    const { data, error } = await supabase
+      .from('artists')
+      .update(publicUpdates)
+      .eq('slug', slug)
+      .select('*')
+      .maybeSingle()
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    artistRow = data
+  } else {
+    const { data, error } = await supabase
+      .from('artists')
+      .select('*')
+      .eq('slug', slug)
+      .maybeSingle()
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    artistRow = data
   }
 
-  return NextResponse.json({ artist: data })
+  if (!artistRow) {
+    return NextResponse.json({ error: 'Artist not found' }, { status: 404 })
+  }
+  const artistId = artistRow.id as string
+
+  // Upsert PII into the sister table. If this fails the public columns may
+  // already be written, so report a partial update rather than a clean error.
+  let privateRow: Record<string, unknown> | null = null
+  if (Object.keys(privateUpdates).length > 0) {
+    const { data, error } = await supabase
+      .from('artists_private')
+      .upsert({ artist_id: artistId, ...privateUpdates }, { onConflict: 'artist_id' })
+      .select('*')
+      .maybeSingle()
+    if (error) {
+      return NextResponse.json(
+        {
+          error: `Public fields saved, but private fields failed: ${error.message}`,
+          partial: true,
+        },
+        { status: 500 },
+      )
+    }
+    privateRow = data
+  } else {
+    const { data } = await supabase
+      .from('artists_private')
+      .select('*')
+      .eq('artist_id', artistId)
+      .maybeSingle()
+    privateRow = data ?? null
+  }
+
+  return NextResponse.json({ artist: mergeArtistPrivate(artistRow, privateRow) })
 }
