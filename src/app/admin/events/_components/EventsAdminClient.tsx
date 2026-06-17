@@ -316,6 +316,25 @@ function formFromEvent(ev: AdminEvent): FormState {
   }
 }
 
+// Payload returned by /api/admin/events/resolve. Mirrors the route's Resolved
+// type — every field nullable so a partial extraction is still useful.
+type ResolverPayload = {
+  title: string | null
+  description: string | null
+  poster_url: string | null
+  venue: string | null
+  city: string | null
+  country: string | null
+  event_date: string | null
+  end_date: string | null
+  ticket_url: string | null
+  source_url: string
+  lineup_text: string | null
+  dateNeedsReview: boolean
+  resolved: boolean
+  message?: string
+}
+
 function EventForm({
   initial,
   onCancel,
@@ -330,6 +349,10 @@ function EventForm({
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Set when a Paste-a-link resolve returned no usable date (or an explicit
+  // dateNeedsReview flag). Cleared the moment the admin types into the start
+  // field — by then it's no longer "needs review", it's been entered.
+  const [dateNeedsReview, setDateNeedsReview] = useState(false)
 
   // Lineup chips: hydrate the artist details for ids already on the event so
   // the chips render with names and not opaque UUIDs.
@@ -365,7 +388,33 @@ function EventForm({
   }, [])
 
   function patch<K extends keyof FormState>(key: K, value: FormState[K]) {
+    if (key === 'event_date' && dateNeedsReview) setDateNeedsReview(false)
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  // Drop resolver results into the form state. Each field overwrites only
+  // when the resolver returned a non-null value, so a partial extraction
+  // doesn't wipe fields the admin already filled. Title/poster/etc. are
+  // direct mappings; dateNeedsReview becomes the inline notice flag.
+  function applyResolverPayload(p: ResolverPayload) {
+    setForm((f) => ({
+      ...f,
+      title: p.title ?? f.title,
+      description: p.description ?? f.description,
+      poster_url: p.poster_url ?? f.poster_url,
+      venue: p.venue ?? f.venue,
+      city: p.city ?? f.city,
+      country: p.country ?? f.country,
+      // Only stamp the date when the resolver was confident enough to return
+      // one (i.e. it carried an explicit timezone). Otherwise leave whatever
+      // the admin already typed.
+      event_date: p.event_date ?? f.event_date,
+      end_date: p.end_date ?? f.end_date,
+      ticket_url: p.ticket_url ?? f.ticket_url,
+      source_url: p.source_url ?? f.source_url,
+      lineup_text: p.lineup_text ?? f.lineup_text,
+    }))
+    setDateNeedsReview(p.dateNeedsReview || !p.event_date)
   }
 
   function addArtist(a: ArtistOption) {
@@ -458,6 +507,16 @@ function EventForm({
         </button>
       </div>
 
+      {!initial && (
+        <LinkResolverPanel onResolved={applyResolverPayload} />
+      )}
+
+      {dateNeedsReview && (
+        <div className="rounded-[var(--radius)] border border-[var(--color-accent)] bg-[var(--color-accent-subtle)] px-3 py-2 text-xs text-[var(--color-fg-primary)]">
+          Couldn&apos;t detect the date automatically — please set the start time below.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <label className={labelCls}>Title *</label>
@@ -493,7 +552,7 @@ function EventForm({
             required
             value={form.event_date}
             onChange={(e) => patch('event_date', e.target.value)}
-            className={inputCls}
+            className={`${inputCls} ${dateNeedsReview ? 'border-[var(--color-accent)]' : ''}`}
           />
         </div>
         <div>
@@ -575,6 +634,7 @@ function EventForm({
             placeholder="https://"
             className={inputCls}
           />
+          <PosterPreview src={form.poster_url} />
         </div>
 
         <div className="sm:col-span-2">
@@ -824,6 +884,137 @@ function ArtistThumb({ src, alt }: { src: string | null; alt: string }) {
   return (
     <div className="w-8 h-8 rounded-full bg-[var(--color-bg-higher)] flex items-center justify-center text-[10px] font-semibold text-[var(--color-fg-secondary)] flex-shrink-0">
       {initials || '♪'}
+    </div>
+  )
+}
+
+// ── Poster preview ───────────────────────────────────────────────────────────
+
+function PosterPreview({ src }: { src: string }) {
+  const trimmed = src.trim()
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return null
+  return (
+    <div className="mt-2 rounded-[var(--radius)] overflow-hidden border border-[var(--color-border-subtle)] bg-[var(--color-bg-higher)] inline-block">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={trimmed}
+        alt="Poster preview"
+        className="h-32 w-auto object-contain block"
+        loading="lazy"
+        // If the URL is bad, hide the preview rather than show a broken image icon.
+        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+      />
+    </div>
+  )
+}
+
+// ── Link resolver panel ──────────────────────────────────────────────────────
+
+// Sits above the new-event form. Admin pastes a ticketing URL (Howler,
+// Quicket, anything with OG/JSON-LD), the server-side resolver fetches it and
+// returns extracted fields, and we hand the payload up to the parent form
+// to prefill via applyResolverPayload(). The admin then reviews/edits and
+// saves through the existing explicit save path. No auto-create.
+function LinkResolverPanel({ onResolved }: { onResolved: (p: ResolverPayload) => void }) {
+  const [open, setOpen] = useState(false)
+  const [url, setUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null)
+
+  async function handleFetch() {
+    const trimmed = url.trim()
+    if (!trimmed) {
+      setMessage({ kind: 'error', text: 'Paste a URL first' })
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/admin/events/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: trimmed }),
+      })
+      const data = (await res.json()) as ResolverPayload | { error?: string }
+      if (!res.ok) {
+        const err = (data as { error?: string }).error ?? 'Lookup failed'
+        throw new Error(err)
+      }
+      const payload = data as ResolverPayload
+      onResolved(payload)
+      if (!payload.resolved) {
+        setMessage({
+          kind: 'info',
+          text: payload.message ?? 'No usable metadata on that page — fill the fields by hand.',
+        })
+      } else {
+        setMessage({ kind: 'success', text: 'Prefilled — review the fields below before saving.' })
+      }
+    } catch (err) {
+      setMessage({ kind: 'error', text: err instanceof Error ? err.message : 'Lookup failed' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-higher)]">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-sm font-semibold text-[var(--color-fg-primary)]">
+          Paste a link to auto-fill
+        </span>
+        <span className="text-xs text-[var(--color-fg-tertiary)]">
+          {open ? 'Hide' : 'Howler, Quicket, or any event page'}
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3 border-t border-[var(--color-border-subtle)] pt-3">
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://howler.co.za/events/… or https://www.quicket.co.za/events/…"
+              className={inputCls}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (!busy) handleFetch()
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleFetch}
+              disabled={busy || !url.trim()}
+              className="text-sm font-semibold border border-[var(--color-border-default)] text-[var(--color-fg-primary)] hover:bg-[var(--color-bg-elevated)] disabled:opacity-40 rounded-[var(--radius)] px-4 transition-colors whitespace-nowrap"
+            >
+              {busy ? 'Fetching…' : 'Fetch details'}
+            </button>
+          </div>
+          <p className="text-[10px] text-[var(--color-fg-tertiary)]">
+            Pulls the title, flyer, venue, lineup, and (when the source carries
+            a timezone) the start time. Review every field before saving — the
+            event is created as a draft.
+          </p>
+          {message && (
+            <p
+              className={`text-xs ${
+                message.kind === 'success' ? 'text-[var(--color-accent)]' :
+                message.kind === 'error'   ? 'text-[var(--color-error)]'  :
+                                              'text-[var(--color-fg-secondary)]'
+              }`}
+            >
+              {message.text}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
