@@ -344,3 +344,104 @@ export async function suggestChannels(name: string): Promise<SuggestResult> {
     return { topic: null, oac: null }
   }
 }
+
+// ── Single-video metadata (paste-a-link) ───────────────────────────────────
+
+const VIDEO_ID_RE = /^[\w-]{11}$/
+
+// Parse a single video reference from common YouTube URL shapes or a bare ID.
+// Accepts: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/shorts/ID,
+// youtube.com/embed/ID, youtube.com/live/ID, music.youtube.com/watch?v=ID,
+// m.youtube.com variants, and a bare 11-char video ID. Distinct from
+// parseYouTubeInput, which only resolves channel/handle URLs.
+export function parseVideoInput(input: string): { videoId: string } | null {
+  const s = input.trim()
+  if (!s) return null
+
+  // Bare 11-char video ID (no path/host punctuation).
+  if (!s.includes('/') && !s.includes('.') && VIDEO_ID_RE.test(s)) {
+    return { videoId: s }
+  }
+
+  const toTry = /^https?:\/\//i.test(s) ? s : s.includes('.') ? `https://${s}` : null
+  if (!toTry) return null
+
+  try {
+    const url = new URL(toTry)
+    const host = url.hostname.replace(/^www\./, '').replace(/^m\./, '')
+
+    if (host === 'youtu.be') {
+      const id = url.pathname.slice(1).split('/')[0]
+      if (VIDEO_ID_RE.test(id)) return { videoId: id }
+      return null
+    }
+
+    if (host === 'youtube.com' || host === 'music.youtube.com') {
+      const v = url.searchParams.get('v')
+      if (v && VIDEO_ID_RE.test(v)) return { videoId: v }
+      const pathMatch = url.pathname.match(/^\/(?:shorts|embed|live|v)\/([\w-]{11})/)
+      if (pathMatch) return { videoId: pathMatch[1] }
+    }
+  } catch {
+    // fall through
+  }
+  return null
+}
+
+export type VideoMeta = {
+  id: string
+  title: string
+  channelTitle: string
+  channelId: string
+  publishedAt: string | null
+  thumbnailUrl: string | null
+}
+
+// videos.list — metadata for a single video via the Data API. Returns null on
+// missing key / no result / 4xx-5xx (fetchYT already swallows those), so the
+// caller can fall back to oEmbed.
+export async function getVideoById(videoId: string): Promise<VideoMeta | null> {
+  const json = await fetchYT(
+    `${BASE}/videos?part=snippet,contentDetails&id=${encodeURIComponent(videoId)}`,
+  )
+  if (!json) return null
+  try {
+    const item = (json as { items?: Array<Record<string, unknown>> })?.items?.[0] as
+      | {
+          id?: string
+          snippet?: {
+            title?: string
+            channelTitle?: string
+            channelId?: string
+            publishedAt?: string
+            thumbnails?: {
+              maxres?: { url?: string }
+              standard?: { url?: string }
+              high?: { url?: string }
+              medium?: { url?: string }
+              default?: { url?: string }
+            }
+          }
+        }
+      | undefined
+    const title = item?.snippet?.title
+    if (!title) return null
+    const thumbs = item?.snippet?.thumbnails
+    return {
+      id: item?.id ?? videoId,
+      title,
+      channelTitle: item?.snippet?.channelTitle ?? '',
+      channelId: item?.snippet?.channelId ?? '',
+      publishedAt: item?.snippet?.publishedAt ?? null,
+      thumbnailUrl:
+        thumbs?.maxres?.url ??
+        thumbs?.standard?.url ??
+        thumbs?.high?.url ??
+        thumbs?.medium?.url ??
+        thumbs?.default?.url ??
+        null,
+    }
+  } catch {
+    return null
+  }
+}

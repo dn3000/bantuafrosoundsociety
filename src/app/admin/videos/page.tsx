@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { PasteLinkSection } from './_components/PasteLinkSection'
+import { PicksSection } from './_components/PicksSection'
+import { applicableRails, RAIL_LABELS, type RailKey } from './_components/rails'
 
 type VideoStatus = 'pending' | 'approved' | 'rejected'
 type StatusFilter = VideoStatus | 'all'
+type View = 'library' | 'featured'
 
 type Video = {
   id: string
@@ -57,6 +61,7 @@ const pagerCls =
 
 export default function VideosPage() {
   const supabase = useMemo(() => createClient(), [])
+  const [view, setView] = useState<View>('library')
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('pending')
   const [videos, setVideos] = useState<Video[]>([])
   const [total, setTotal] = useState(0)
@@ -65,6 +70,7 @@ export default function VideosPage() {
   const [page, setPage] = useState(0)
   const [actioning, setActioning] = useState<Set<string>>(new Set())
   const [rejectingAll, setRejectingAll] = useState(false)
+  const [pinnedMap, setPinnedMap] = useState<Record<string, RailKey[]>>({})
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; msg: string } | null>(null)
 
   const fetchCounts = useCallback(async () => {
@@ -79,6 +85,17 @@ export default function VideosPage() {
       next[statuses[i]] = count ?? 0
     })
     setCounts(next)
+  }, [supabase])
+
+  // video_id → rails it is pinned to, so rows can show a "Pinned" indicator and
+  // the Pin menu can disable rails already taken.
+  const fetchPinned = useCallback(async () => {
+    const { data } = await supabase.from('video_picks').select('video_id, rail_key')
+    const map: Record<string, RailKey[]> = {}
+    for (const row of (data ?? []) as { video_id: string; rail_key: RailKey }[]) {
+      ;(map[row.video_id] ??= []).push(row.rail_key)
+    }
+    setPinnedMap(map)
   }, [supabase])
 
   const fetchVideos = useCallback(async () => {
@@ -109,13 +126,23 @@ export default function VideosPage() {
     }
   }, [supabase, page, activeFilter])
 
+  // Defer each fetch into a timer so the effect body itself never triggers a
+  // synchronous setState (lint: react-hooks/set-state-in-effect) — same pattern
+  // as QueueClient. The fetchers are also called directly from handlers.
   useEffect(() => {
-    fetchVideos()
+    const t = setTimeout(() => void fetchVideos(), 0)
+    return () => clearTimeout(t)
   }, [fetchVideos])
 
   useEffect(() => {
-    fetchCounts()
+    const t = setTimeout(() => void fetchCounts(), 0)
+    return () => clearTimeout(t)
   }, [fetchCounts])
+
+  useEffect(() => {
+    const t = setTimeout(() => void fetchPinned(), 0)
+    return () => clearTimeout(t)
+  }, [fetchPinned])
 
   useEffect(() => {
     if (!toast) return
@@ -207,6 +234,29 @@ export default function VideosPage() {
     }
   }
 
+  async function handlePin(video: Video, rail: RailKey) {
+    if (actioning.has(video.id)) return
+    startActioning(video.id)
+    try {
+      const res = await fetch('/api/admin/video-picks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rail_key: rail, video_id: video.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setToast({ kind: 'error', msg: (data as { error?: string }).error ?? 'Pin failed' })
+        return
+      }
+      setPinnedMap((m) => ({ ...m, [video.id]: [...(m[video.id] ?? []), rail] }))
+      setToast({ kind: 'success', msg: `Pinned "${video.title}" to ${RAIL_LABELS[rail]}` })
+    } catch {
+      setToast({ kind: 'error', msg: 'Pin failed' })
+    } finally {
+      stopActioning(video.id)
+    }
+  }
+
   async function handleDelete(video: Video) {
     if (actioning.has(video.id)) return
     const ok = window.confirm(`Delete "${video.title}"? This cannot be undone.`)
@@ -269,7 +319,7 @@ export default function VideosPage() {
             </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            {videos.length > 0 && (
+            {view === 'library' && videos.length > 0 && (
               <button
                 type="button"
                 onClick={rejectAllOnPage}
@@ -294,91 +344,126 @@ export default function VideosPage() {
           </div>
         </header>
 
-        {/* Status filter tabs */}
-        <div className="flex gap-0.5 mb-5 border-b border-[var(--color-border-subtle)]">
-          {TABS.map((tab) => {
-            const count = tab.key === 'all' ? allCount : counts[tab.key]
-            const isActive = activeFilter === tab.key
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => handleFilterChange(tab.key)}
-                className={`px-4 py-2 text-sm rounded-t-[var(--radius)] transition-colors border-b-2 -mb-px ${
-                  isActive
-                    ? 'border-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold'
-                    : 'border-transparent text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)]'
-                }`}
-              >
-                {tab.label}
-                <span
-                  className={`ml-1.5 text-xs tabular-nums ${
-                    isActive ? 'text-[var(--color-fg-secondary)]' : 'text-[var(--color-fg-tertiary)]'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            )
-          })}
+        {/* Paste-a-link — always available at the top */}
+        <PasteLinkSection
+          onSaved={() => {
+            fetchVideos()
+            fetchCounts()
+            fetchPinned()
+          }}
+        />
+
+        {/* Library / Featured view switch */}
+        <div className="flex gap-2 mb-5">
+          {(['library', 'featured'] as View[]).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`text-sm font-semibold rounded-[var(--radius)] px-4 py-1.5 border transition-colors ${
+                view === v
+                  ? 'border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent-subtle)]'
+                  : 'border-[var(--color-border-default)] text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)]'
+              }`}
+            >
+              {v === 'library' ? 'Library' : 'Featured / Picks'}
+            </button>
+          ))}
         </div>
 
-        {loading ? (
-          <p className="text-sm text-[var(--color-fg-secondary)]">Loading…</p>
-        ) : videos.length === 0 ? (
-          <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-10 text-center">
-            <p className="text-[var(--color-fg-secondary)] mb-4">
-              No {activeFilter !== 'all' ? activeFilter : ''} videos.
-            </p>
-            {activeFilter === 'pending' && (
-              <Link
-                href="/admin/scrapers"
-                className="inline-block text-sm text-[var(--color-accent)] hover:underline"
-              >
-                Run the OAC ingestion →
-              </Link>
-            )}
-          </div>
+        {view === 'featured' ? (
+          <PicksSection />
         ) : (
-          <ul className="space-y-2">
-            {videos.map((v) => (
-              <VideoRow
-                key={v.id}
-                video={v}
-                actioning={actioning.has(v.id)}
-                onCategoryChange={(cat) => handleCategoryChange(v, cat)}
-                onStatusChange={(s) => handleStatusChange(v, s)}
-                onExclusiveToggle={() => handleExclusiveToggle(v)}
-                onApprove={() => handleStatusChange(v, 'approved')}
-                onReject={() => handleStatusChange(v, 'rejected')}
-                onDelete={() => handleDelete(v)}
-              />
-            ))}
-          </ul>
-        )}
+          <>
+            {/* Status filter tabs */}
+            <div className="flex gap-0.5 mb-5 border-b border-[var(--color-border-subtle)]">
+              {TABS.map((tab) => {
+                const count = tab.key === 'all' ? allCount : counts[tab.key]
+                const isActive = activeFilter === tab.key
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => handleFilterChange(tab.key)}
+                    className={`px-4 py-2 text-sm rounded-t-[var(--radius)] transition-colors border-b-2 -mb-px ${
+                      isActive
+                        ? 'border-[var(--color-accent)] text-[var(--color-fg-primary)] font-semibold'
+                        : 'border-transparent text-[var(--color-fg-secondary)] hover:text-[var(--color-fg-primary)]'
+                    }`}
+                  >
+                    {tab.label}
+                    <span
+                      className={`ml-1.5 text-xs tabular-nums ${
+                        isActive ? 'text-[var(--color-fg-secondary)]' : 'text-[var(--color-fg-tertiary)]'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--color-border-subtle)]">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className={pagerCls}
-            >
-              ← Previous
-            </button>
-            <span className="text-xs text-[var(--color-fg-tertiary)]">
-              Page {page + 1} of {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-              disabled={page >= totalPages - 1}
-              className={pagerCls}
-            >
-              Next →
-            </button>
-          </div>
+            {loading ? (
+              <p className="text-sm text-[var(--color-fg-secondary)]">Loading…</p>
+            ) : videos.length === 0 ? (
+              <div className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-10 text-center">
+                <p className="text-[var(--color-fg-secondary)] mb-4">
+                  No {activeFilter !== 'all' ? activeFilter : ''} videos.
+                </p>
+                {activeFilter === 'pending' && (
+                  <Link
+                    href="/admin/scrapers"
+                    className="inline-block text-sm text-[var(--color-accent)] hover:underline"
+                  >
+                    Run the OAC ingestion →
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {videos.map((v) => (
+                  <VideoRow
+                    key={v.id}
+                    video={v}
+                    actioning={actioning.has(v.id)}
+                    pinnedRails={pinnedMap[v.id] ?? []}
+                    onCategoryChange={(cat) => handleCategoryChange(v, cat)}
+                    onStatusChange={(s) => handleStatusChange(v, s)}
+                    onExclusiveToggle={() => handleExclusiveToggle(v)}
+                    onPin={(rail) => handlePin(v, rail)}
+                    onApprove={() => handleStatusChange(v, 'approved')}
+                    onReject={() => handleStatusChange(v, 'rejected')}
+                    onDelete={() => handleDelete(v)}
+                  />
+                ))}
+              </ul>
+            )}
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--color-border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className={pagerCls}
+                >
+                  ← Previous
+                </button>
+                <span className="text-xs text-[var(--color-fg-tertiary)]">
+                  Page {page + 1} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className={pagerCls}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -398,27 +483,87 @@ export default function VideosPage() {
   )
 }
 
+// Per-row "Pin to…" control. Offers only the rails applicable to this video
+// (derived from category + is_exclusive) and disables rails it's already on.
+function PinMenu({
+  video,
+  pinnedRails,
+  disabled,
+  onPin,
+}: {
+  video: Video
+  pinnedRails: RailKey[]
+  disabled: boolean
+  onPin: (rail: RailKey) => void
+}) {
+  const rails = applicableRails(video.category, video.is_exclusive)
+  if (rails.length === 0) {
+    return (
+      <span className="text-[10px] text-[var(--color-fg-tertiary)] flex-shrink-0 w-16 text-center">
+        No rail
+      </span>
+    )
+  }
+  const pinned = new Set(pinnedRails)
+  return (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      {pinned.size > 0 && (
+        <span
+          title={pinnedRails.map((r) => RAIL_LABELS[r]).join(', ')}
+          className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-[var(--color-accent-subtle)] text-[var(--color-accent)]"
+        >
+          Pinned {pinned.size}
+        </span>
+      )}
+      <select
+        value=""
+        disabled={disabled}
+        onChange={(e) => {
+          const r = e.target.value
+          if (r) onPin(r as RailKey)
+        }}
+        className="bg-[var(--color-bg-input)] border border-[var(--color-border-default)] rounded-[var(--radius)] px-2 py-1.5 text-xs text-[var(--color-fg-primary)] focus:border-[var(--color-border-strong)] focus:outline-none disabled:opacity-50"
+      >
+        <option value="">Pin to…</option>
+        {rails.map((r) => (
+          <option key={r} value={r} disabled={pinned.has(r)}>
+            {RAIL_LABELS[r]}
+            {pinned.has(r) ? ' ✓' : ''}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function VideoRow({
   video,
   actioning,
+  pinnedRails,
   onCategoryChange,
   onStatusChange,
   onExclusiveToggle,
+  onPin,
   onApprove,
   onReject,
   onDelete,
 }: {
   video: Video
   actioning: boolean
+  pinnedRails: RailKey[]
   onCategoryChange: (cat: string) => void
   onStatusChange: (s: VideoStatus) => void
   onExclusiveToggle: () => void
+  onPin: (rail: RailKey) => void
   onApprove: () => void
   onReject: () => void
   onDelete: () => void
 }) {
   return (
-    <li className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 flex items-center gap-3">
+    <li
+      id={`video-${video.id}`}
+      className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-3 flex items-center gap-3 scroll-mt-24"
+    >
       {/* 16:9 thumbnail */}
       <div className="w-24 h-[54px] flex-shrink-0 rounded-[var(--radius)] overflow-hidden bg-[var(--color-bg-higher)]">
         {video.thumbnail_url ? (
@@ -460,6 +605,9 @@ function VideoRow({
           )}
         </p>
       </div>
+
+      {/* Pin to homepage rail */}
+      <PinMenu video={video} pinnedRails={pinnedRails} disabled={actioning} onPin={onPin} />
 
       {/* Exclusive toggle — pill, optimistic */}
       <button

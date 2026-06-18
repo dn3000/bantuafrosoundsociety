@@ -357,11 +357,15 @@ export default async function HomePage() {
 
   // 5. Watch: approved videos by category (mix / live_set / music_video), published_at desc
   const VIDEO_COLS = 'id, title, thumbnail_url, category, published_at, artists(name)'
+  // Picks embed the picked video's card data; !inner + the status filter drops
+  // any pick whose video is no longer approved.
+  const VIDEO_PICK_COLS = `rail_key, position, videos!inner(${VIDEO_COLS})`
   const VIDEO_ORDER = { ascending: false, nullsFirst: false } as const
 
   const nowIso = new Date().toISOString()
 
   const [
+    { data: videoPicksRaw },
     { data: mixVideosRaw },
     { data: liveSetVideosRaw },
     { data: musicVideoVideosRaw },
@@ -371,6 +375,7 @@ export default async function HomePage() {
     { data: eventsRaw },
     { data: chartsRaw },
   ] = await Promise.all([
+    supabase.from('video_picks').select(VIDEO_PICK_COLS).eq('videos.status', 'approved').order('rail_key', { ascending: true }).order('position', { ascending: true }),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'mix').order('published_at', VIDEO_ORDER).limit(12),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'live_set').eq('is_exclusive', false).order('published_at', VIDEO_ORDER).limit(12),
     supabase.from('videos').select(VIDEO_COLS).eq('status', 'approved').eq('category', 'music_video').order('published_at', VIDEO_ORDER).limit(12),
@@ -399,12 +404,31 @@ export default async function HomePage() {
     }))
   }
 
-  const mixItems = toVideoItems((mixVideosRaw ?? []) as unknown as VideoRow[])
-  const liveSetItems = toVideoItems((liveSetVideosRaw ?? []) as unknown as VideoRow[])
-  const musicVideoItems = toVideoItems((musicVideoVideosRaw ?? []) as unknown as VideoRow[])
-  const podcastItems = toVideoItems((interviewVideosRaw ?? []) as unknown as VideoRow[])
-  const bassSetItems = toVideoItems((liveShowVideosRaw ?? []) as unknown as VideoRow[])
-  const exclusiveSetItems = toVideoItems((exclusiveSetVideosRaw ?? []) as unknown as VideoRow[])
+  // Ride-above: hand-pinned picks (status='approved') render first, then the
+  // chronological feed fills the rest, deduped by video id, capped at 12. Empty
+  // picks for a rail → identical to the plain chronological row.
+  type PickRow = { rail_key: string; videos: VideoRow | VideoRow[] | null }
+  const pickRows = (videoPicksRaw ?? []) as unknown as PickRow[]
+  function pickItemsFor(rail: string): VideoCarouselItem[] {
+    const vids = pickRows
+      .filter((p) => p.rail_key === rail)
+      .map((p) => (Array.isArray(p.videos) ? p.videos[0] : p.videos))
+      .filter((v): v is VideoRow => !!v)
+    return toVideoItems(vids)
+  }
+  function rideAbove(rail: string, chronological: VideoCarouselItem[]): VideoCarouselItem[] {
+    const picks = pickItemsFor(rail)
+    if (picks.length === 0) return chronological
+    const pickedIds = new Set(picks.map((p) => p.id))
+    return [...picks, ...chronological.filter((c) => !pickedIds.has(c.id))].slice(0, 12)
+  }
+
+  const mixItems = rideAbove('mixes', toVideoItems((mixVideosRaw ?? []) as unknown as VideoRow[]))
+  const liveSetItems = rideAbove('live_sets', toVideoItems((liveSetVideosRaw ?? []) as unknown as VideoRow[]))
+  const musicVideoItems = rideAbove('music_videos', toVideoItems((musicVideoVideosRaw ?? []) as unknown as VideoRow[]))
+  const podcastItems = rideAbove('podcasts', toVideoItems((interviewVideosRaw ?? []) as unknown as VideoRow[]))
+  const bassSetItems = rideAbove('bass_sets', toVideoItems((liveShowVideosRaw ?? []) as unknown as VideoRow[]))
+  const exclusiveSetItems = rideAbove('exclusive_sets', toVideoItems((exclusiveSetVideosRaw ?? []) as unknown as VideoRow[]))
 
   // Charts row — map published rows into HomepageChartItem. MobileCharts
   // returns null on empty so the section vanishes when nothing's published.
