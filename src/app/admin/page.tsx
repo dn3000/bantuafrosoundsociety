@@ -2,19 +2,80 @@ import { requireAdminPage } from '@/lib/auth/requireAdmin'
 import Link from 'next/link'
 import { Logo } from '@/components/Logo'
 
+type TileProps = {
+  href: string
+  title: string
+  description: string
+  accent?: string
+  badge?: string
+  highlight?: boolean
+  wide?: boolean
+}
+
+// One dashboard tile, mirroring a sidebar nav item. Optional: an accent line
+// (a small stat), a header badge (e.g. pending count), a highlight ring, and a
+// two-column span (used by the Review queue).
+function Tile({ href, title, description, accent, badge, highlight, wide }: TileProps) {
+  return (
+    <Link
+      href={href}
+      className={`bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block${
+        highlight ? ' ring-1 ring-[var(--color-accent)]' : ''
+      }${wide ? ' sm:col-span-2' : ''}`}
+    >
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <h3 className="text-lg font-semibold text-[var(--color-fg-primary)]">{title}</h3>
+        {badge ? (
+          <span className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-fg-primary)]">
+            {badge}
+          </span>
+        ) : null}
+      </div>
+      <p className="text-sm text-[var(--color-fg-secondary)]">{description}</p>
+      {accent ? (
+        <p className="text-xs font-semibold text-[var(--color-accent)] mt-2">{accent}</p>
+      ) : null}
+    </Link>
+  )
+}
+
+function GroupLabel({ children }: { children: string }) {
+  return (
+    <h2 className="text-[11px] font-semibold tracking-widest uppercase text-[var(--color-fg-tertiary)] mb-3">
+      {children}
+    </h2>
+  )
+}
+
 export default async function AdminDashboardPage() {
   const { supabase, user } = await requireAdminPage()
 
-  // Count slots that currently have a live assignment
-  const { data: liveRows } = await supabase.from('v_editorial_live').select('slot_id')
-  const liveCount = liveRows?.length ?? 0
-
-  // Pending review backlog (submissions + videos) for the Review queue tile.
-  const [pendingSubsRes, pendingVidsRes] = await Promise.all([
+  // All dashboard counts in a single round-trip.
+  const [
+    liveRowsRes,
+    slotTotalRes,
+    pendingSubsRes,
+    pendingVidsRes,
+    approvedVidsRes,
+    publishedArticlesRes,
+  ] = await Promise.all([
+    supabase.from('v_editorial_live').select('slot_id'),
+    supabase.from('editorial_slots').select('id', { count: 'exact', head: true }),
     supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('videos').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('videos').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
+    supabase.from('articles').select('id', { count: 'exact', head: true }).eq('status', 'published'),
   ])
+
+  // "Live" = slots with a current assignment; total = seeded slots (fetched so
+  // the denominator never goes stale as slots are added).
+  const liveCount = liveRowsRes.data?.length ?? 0
+  const slotTotal = slotTotalRes.count ?? 0
   const pendingTotal = (pendingSubsRes.count ?? 0) + (pendingVidsRes.count ?? 0)
+  const approvedVideos = approvedVidsRes.count ?? 0
+  const publishedArticles = publishedArticlesRes.count ?? 0
+
+  const editorialAccent = slotTotal > 0 ? `${liveCount} / ${slotTotal} slots live` : `${liveCount} live`
 
   return (
     <div className="min-h-screen bg-[var(--color-bg-base)] p-6 sm:p-10">
@@ -39,112 +100,82 @@ export default async function AdminDashboardPage() {
           </form>
         </header>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Link
-            href="/admin/queue"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block ring-1 ring-[var(--color-accent)] sm:col-span-2"
-          >
-            <div className="flex items-center justify-between gap-3 mb-1">
-              <h2 className="text-lg font-semibold text-[var(--color-fg-primary)]">Review queue</h2>
-              {pendingTotal > 0 && (
-                <span className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-fg-primary)]">
-                  {pendingTotal} pending
-                </span>
-              )}
+        <div className="space-y-10">
+          {/* Inbox — operations, not homepage-mirrored */}
+          <section>
+            <GroupLabel>Inbox</GroupLabel>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Tile
+                href="/admin/queue"
+                title="Review queue"
+                description="Unified curator's inbox — triage submissions & videos, then promote to slots."
+                badge={pendingTotal > 0 ? `${pendingTotal} pending` : undefined}
+                highlight
+                wide
+              />
             </div>
-            <p className="text-sm text-[var(--color-fg-secondary)]">
-              Unified curator&apos;s inbox — triage submissions &amp; videos, then promote to slots.
-            </p>
-          </Link>
+          </section>
 
-          <Link
-            href="/admin/artists"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Artists</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Manage the BASS scene graph.</p>
-          </Link>
+          {/* Curation rails — ordered top → bottom to mirror the homepage */}
+          <section>
+            <GroupLabel>Curation rails</GroupLabel>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Tile href="/admin/hero" title="Hero" description="Pick, order, and publish hero rail items." />
+              <Tile href="/admin/playlists" title="Playlists" description="Curate playlists featured on the homepage." />
+              <Tile href="/admin/this-week" title="This Week" description="Curate the BASS This Week picks." />
+              <Tile
+                href="/admin/videos"
+                title="Videos"
+                description="Curate the homepage video rows."
+                accent={`${approvedVideos} approved`}
+              />
+              <Tile href="/admin/spotlight" title="Spotlight" description="Curate the Artist Spotlight rail." />
+              <Tile
+                href="/admin/charts"
+                title="Charts"
+                description="Refresh the Shazam SA Dance chart and publish a curated cut."
+              />
+              <Tile href="/admin/events" title="Events" description="Schedule live shows and the homepage events row." />
+              <Tile
+                href="/admin/editorial"
+                title="Editorial"
+                description="Feature content in homepage slots."
+                accent={editorialAccent}
+              />
+              <Tile
+                href="/admin/articles"
+                title="Articles"
+                description="Write and publish BASS Read articles."
+                accent={`${publishedArticles} published`}
+              />
+            </div>
+          </section>
 
-          <Link
-            href="/admin/submissions"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Submissions</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Review queue for tracks, releases, mixes, and events.</p>
-          </Link>
+          {/* Content — long-lived entities */}
+          <section>
+            <GroupLabel>Content</GroupLabel>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Tile href="/admin/artists" title="Artists" description="Manage the BASS scene graph." />
+              <Tile
+                href="/admin/submissions"
+                title="Submissions"
+                description="Review queue for tracks, releases, mixes, and events."
+              />
+            </div>
+          </section>
 
-          <Link
-            href="/admin/editorial"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Editorial</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)] mb-2">Feature content in homepage slots.</p>
-            <p className="text-xs font-semibold text-[var(--color-accent)]">{liveCount} / 7 slots live</p>
-          </Link>
-
-          <Link
-            href="/admin/integrations"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Integrations</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Connect Spotify and other services.</p>
-          </Link>
-
-          <Link
-            href="/admin/scrapers"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Scrapers</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Scan Spotify for new releases into the review queue.</p>
-          </Link>
-
-          <Link
-            href="/admin/playlists"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Playlists</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Curate playlists featured on the homepage.</p>
-          </Link>
-
-          <Link
-            href="/admin/hero"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Hero</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Pick, order, and publish hero rail items.</p>
-          </Link>
-
-          <Link
-            href="/admin/spotlight"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Spotlight</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Curate the Artist Spotlight rail.</p>
-          </Link>
-
-          <Link
-            href="/admin/this-week"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">This Week</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Curate the BASS This Week picks.</p>
-          </Link>
-
-          <Link
-            href="/admin/events"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Events</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Schedule live shows and the homepage events row.</p>
-          </Link>
-
-          <Link
-            href="/admin/charts"
-            className="bg-[var(--color-bg-elevated)] rounded-[var(--radius-md)] p-6 hover:bg-[var(--color-bg-higher)] transition-colors block"
-          >
-            <h2 className="text-lg font-semibold text-[var(--color-fg-primary)] mb-1">Charts</h2>
-            <p className="text-sm text-[var(--color-fg-secondary)]">Refresh the Shazam SA Dance chart and publish a curated cut.</p>
-          </Link>
+          {/* Ingestion */}
+          <section>
+            <GroupLabel>Ingestion</GroupLabel>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Tile
+                href="/admin/scrapers"
+                title="Scrapers"
+                description="Scan Spotify for new releases into the review queue."
+              />
+              <Tile href="/admin/integrations" title="Integrations" description="Connect Spotify and other services." />
+            </div>
+          </section>
         </div>
       </div>
     </div>

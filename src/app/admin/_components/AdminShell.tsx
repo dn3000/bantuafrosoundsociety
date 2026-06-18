@@ -9,6 +9,7 @@ import {
   BarChart3,
   BookOpen,
   Calendar,
+  CalendarRange,
   Database,
   Disc,
   FileText,
@@ -16,10 +17,12 @@ import {
   Layers,
   LayoutDashboard,
   ListMusic,
+  Megaphone,
   Menu,
   Plug,
   Radio,
   SquarePlay,
+  Star,
   UserPlus,
   Users,
   Video,
@@ -34,28 +37,34 @@ type NavGroup = { label: string | null; items: NavItem[] }
 
 const NAV: NavGroup[] = [
   {
-    label: null,
+    // Operations — not homepage-mirrored.
+    label: 'Inbox',
     items: [
       { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
       { href: '/admin/queue', label: 'Review queue', icon: Inbox, badge: true },
     ],
   },
   {
+    // Ordered top → bottom to mirror the homepage row order.
+    label: 'Curation rails',
+    items: [
+      { href: '/admin/hero', label: 'Hero', icon: Megaphone },
+      { href: '/admin/playlists', label: 'Playlists', icon: ListMusic },
+      { href: '/admin/this-week', label: 'This Week', icon: CalendarRange },
+      { href: '/admin/videos', label: 'Videos', icon: Video },
+      { href: '/admin/spotlight', label: 'Spotlight', icon: Star },
+      { href: '/admin/charts', label: 'Charts', icon: BarChart3 },
+      { href: '/admin/events', label: 'Events', icon: Calendar },
+      { href: '/admin/editorial', label: 'Editorial', icon: Layers },
+      { href: '/admin/articles', label: 'Articles', icon: BookOpen },
+    ],
+  },
+  {
+    // Long-lived entities.
     label: 'Content',
     items: [
       { href: '/admin/artists', label: 'Artists', icon: Users },
       { href: '/admin/submissions', label: 'Submissions', icon: FileText },
-      { href: '/admin/videos', label: 'Videos', icon: Video },
-      { href: '/admin/articles', label: 'Articles', icon: BookOpen },
-      { href: '/admin/events', label: 'Events', icon: Calendar },
-    ],
-  },
-  {
-    label: 'Curation',
-    items: [
-      { href: '/admin/playlists', label: 'Playlists', icon: ListMusic },
-      { href: '/admin/editorial', label: 'Editorial', icon: Layers },
-      { href: '/admin/charts', label: 'Charts', icon: BarChart3 },
     ],
   },
   {

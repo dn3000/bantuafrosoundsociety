@@ -13,9 +13,10 @@
 -- Public surface reads status='published' rows for the key, ordered by
 -- position, and shows captured_at as "as of …".
 --
--- artist_id is intentionally NOT a foreign key — same pattern as
--- hero_items.ref_id. It's a soft link to artists(id) for ones the admin
--- has matched against the roster; null is fine.
+-- artist_id is a real (nullable) FK to artists(id): set when the admin matches
+-- a chart row against the roster, null otherwise. ON DELETE SET NULL keeps the
+-- chart row (with its denormalised artist_name) if the artist is later pruned.
+-- The FK lets PostgREST resolve the artists!artist_id embed the admin route uses.
 
 CREATE TABLE IF NOT EXISTS public.charts (
   id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -29,7 +30,7 @@ CREATE TABLE IF NOT EXISTS public.charts (
   apple_music_url TEXT,
   isrc            TEXT,
   external_id     TEXT,
-  artist_id       UUID,
+  artist_id       UUID         REFERENCES public.artists(id) ON DELETE SET NULL,
   status          TEXT         NOT NULL DEFAULT 'draft'
                                CHECK (status IN ('draft', 'published')),
   captured_at     TIMESTAMPTZ,
