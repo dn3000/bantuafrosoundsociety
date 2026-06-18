@@ -22,8 +22,9 @@ function redirectToLogin(request: NextRequest): NextResponse {
 }
 
 /**
- * Perimeter guard for the admin area. Runs on every request matched by
- * `config.matcher` (admin pages and admin API routes) and enforces, in order:
+ * Perimeter guard for the admin area (Next.js 16 Proxy, formerly Middleware).
+ * Runs on every request matched by `config.matcher` (admin pages and admin API
+ * routes) and enforces, in order:
  *   1. an authenticated Supabase user, and
  *   2. `is_admin()` for that user.
  *
@@ -31,7 +32,7 @@ function redirectToLogin(request: NextRequest): NextResponse {
  * A signed-in non-admin is sent to the same place as an anonymous visitor so
  * we don't leak that the account exists but lacks the role.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Let the login page and auth handshake routes through untouched.
@@ -88,9 +89,11 @@ export async function middleware(request: NextRequest) {
   return supabaseResponse
 }
 
-// Keep the matcher tight: only admin pages and admin API routes run this
-// middleware. Static assets and Next internals never match (they live outside
-// /admin and /api/admin), so no negative-lookahead exclusion is needed.
+// Keep the matcher tight: only admin pages and admin API routes run this proxy.
+// Static assets and Next internals never match (they live outside /admin and
+// /api/admin), so no negative-lookahead exclusion is needed. The matcher shape
+// is unchanged from the middleware convention — Next 16 still reads
+// `export const config = { matcher: [...] }`.
 export const config = {
   matcher: ['/admin', '/admin/:path*', '/api/admin/:path*'],
 }

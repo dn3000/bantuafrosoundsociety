@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReviewCard } from '@/components/admin/ReviewCard'
 import {
   ALL_SOURCE_METHODS,
@@ -32,6 +32,8 @@ export function QueueClient() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  // Cancels an in-flight "Load more" request if the component unmounts mid-fetch.
+  const loadMoreCtrlRef = useRef<AbortController | null>(null)
 
   // Filters
   const [methods, setMethods] = useState<string[]>([])
@@ -74,11 +76,12 @@ export function QueueClient() {
     [tab, methods, types, artist, search],
   )
 
-  const fetchQueue = useCallback(async () => {
+  const fetchQueue = useCallback(async (signal?: AbortSignal) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/queue?${buildParams()}`)
+      const res = await fetch(`/api/admin/queue?${buildParams()}`, { signal })
       const data = await res.json()
+      if (signal?.aborted) return
       if (res.ok) {
         setItems(data.items ?? [])
         setCounts(data.counts ?? { pending_submissions: 0, pending_videos: 0, deferred: 0, needs_work: 0 })
@@ -87,29 +90,42 @@ export function QueueClient() {
         setToast({ kind: 'error', msg: data.error || 'Failed to load queue' })
       }
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
       setToast({ kind: 'error', msg: err instanceof Error ? err.message : 'Failed to load queue' })
     } finally {
-      setLoading(false)
+      // Skip when aborted: a newer fetch (or unmount) now owns the loading flag.
+      if (!signal?.aborted) setLoading(false)
     }
   }, [buildParams])
 
-  // Reset selection + refetch whenever the filter context changes (debounced).
-  // setState lives inside the timer callback (not the effect body) by design.
+  // Reset selection + refetch whenever the filter context changes (debounced
+  // 300ms — this is also the debounce for the free-text title search, which
+  // feeds filterSig). The AbortController cancels the in-flight feed request
+  // when the filter changes again or the component unmounts, so rapid tab/
+  // filter flips and fast typing can't pile up stale responses (or stale
+  // setState) in memory. setState lives inside the timer callback by design.
   useEffect(() => {
+    const ctrl = new AbortController()
     const t = setTimeout(() => {
       setSelected(new Set())
-      void fetchQueue()
-    }, 250)
-    return () => clearTimeout(t)
+      void fetchQueue(ctrl.signal)
+    }, 300)
+    return () => {
+      ctrl.abort()
+      clearTimeout(t)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterSig])
 
   async function loadMore() {
     if (!nextCursor || loadingMore) return
     setLoadingMore(true)
+    const ctrl = new AbortController()
+    loadMoreCtrlRef.current = ctrl
     try {
-      const res = await fetch(`/api/admin/queue?${buildParams(nextCursor)}`)
+      const res = await fetch(`/api/admin/queue?${buildParams(nextCursor)}`, { signal: ctrl.signal })
       const data = await res.json()
+      if (ctrl.signal.aborted) return
       if (res.ok) {
         setItems((prev) => {
           const seen = new Set(prev.map(keyOf))
@@ -118,10 +134,15 @@ export function QueueClient() {
         })
         setNextCursor(data.nextCursor ?? null)
       }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
     } finally {
-      setLoadingMore(false)
+      if (!ctrl.signal.aborted) setLoadingMore(false)
     }
   }
+
+  // Abort a pending "Load more" if we unmount before it resolves.
+  useEffect(() => () => loadMoreCtrlRef.current?.abort(), [])
 
   // Auto-dismiss terminal toasts.
   useEffect(() => {
@@ -131,26 +152,36 @@ export function QueueClient() {
     }
   }, [toast])
 
-  // Artist quick-search (debounced). All setState happens inside the timer.
+  // Artist quick-search (debounced 300ms). An AbortController cancels the
+  // previous in-flight request on every keystroke, so typing "bur" → "burn" →
+  // "burna" leaves exactly one live request instead of one per keystroke.
   useEffect(() => {
     const q = artistQuery.trim()
+    const ctrl = new AbortController()
     const t = setTimeout(async () => {
       if (!q) {
         setArtistResults([])
         return
       }
       try {
-        const res = await fetch(`/api/admin/artists/search?q=${encodeURIComponent(q)}`)
+        const res = await fetch(`/api/admin/queue/artists?q=${encodeURIComponent(q)}&limit=10`, {
+          signal: ctrl.signal,
+        })
         const data = await res.json()
+        if (ctrl.signal.aborted) return
         if (res.ok) {
           setArtistResults(data.artists ?? [])
           setArtistMenuOpen(true)
         }
-      } catch {
-        /* ignore */
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        /* ignore — quick-search is non-critical */
       }
-    }, 250)
-    return () => clearTimeout(t)
+    }, 300)
+    return () => {
+      ctrl.abort()
+      clearTimeout(t)
+    }
   }, [artistQuery])
 
   // ----- count bookkeeping -----

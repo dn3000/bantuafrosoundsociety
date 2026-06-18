@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/server'
  *
  * Centralises the two checks every admin route needs — an authenticated user
  * AND `is_admin()` — into one call so routes don't re-implement (and drift on)
- * the auth preamble. The `middleware.ts` perimeter already blocks non-admins at
+ * the auth preamble. The `proxy.ts` perimeter already blocks non-admins at
  * the edge; calling this in the handler is defense-in-depth: the route stays
  * safe even if the matcher is later loosened or the route moves out from under
  * `/api/admin`.

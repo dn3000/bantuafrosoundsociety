@@ -19,7 +19,7 @@ export async function createClient() {
             )
           } catch {
             // The setAll method was called from a Server Component.
-            // Safe to ignore if middleware is refreshing user sessions.
+            // Safe to ignore if the proxy is refreshing user sessions.
           }
         },
       },
